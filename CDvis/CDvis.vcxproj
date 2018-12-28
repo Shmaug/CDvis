@@ -145,11 +145,13 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
   <ItemGroup>
     <ClInclude Include="CDialogEventHandler.hpp" />
     <ClInclude Include="cdvis.hpp" />
+    <ClInclude Include="Dicom.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CDialogEventHandler.cpp" />
     <ClCompile Include="cdvis.cpp" />
+    <ClCompile Include="Dicom.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>

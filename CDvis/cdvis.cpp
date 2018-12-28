@@ -22,6 +22,7 @@
 #include <SpriteBatch.hpp>
 #include <Font.hpp>
 
+#include "Dicom.hpp"
 #include "VolumeRenderer.hpp"
 
 #pragma comment(lib, "shlwapi.lib")
@@ -38,13 +39,12 @@ shared_ptr<Scene> scene;
 shared_ptr<Font> arial;
 shared_ptr<VolumeRenderer> volume;
 
-wchar_t pbuf[1024];
-
+wchar_t pbuf[1024]; // performance overlay text
 float frameTimes[128];
 unsigned int frameTimeIndex;
-
 bool debugDraw = false;
 bool wireframe = false;
+float z = -2.0f;
 
 int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow) {
 	Microsoft::WRL::Wrappers::RoInitializeWrapper initialize(RO_INIT_SINGLETHREADED);
@@ -77,20 +77,18 @@ void cdvis::Initialize() {
 	arial->GetTexture()->Upload();
 
 	camera = scene->AddObject<Camera>(L"Camera");
-	camera->LocalPosition(0, 0, -2.0f);
+	camera->LocalPosition(0, 0, z);
 	camera->FieldOfView(60);
 	camera->PixelWidth(Graphics::GetWindow()->GetWidth());
 	camera->PixelHeight(Graphics::GetWindow()->GetHeight());
 
-	shared_ptr<Shader> shader = AssetDatabase::GetAsset<Shader>(L"Default");
 	shared_ptr<Mesh> cubeMesh = shared_ptr<Mesh>(new Mesh(L"Cube"));
-	cubeMesh->LoadCube(1.0f);
+	cubeMesh->LoadCube(.5f);
 	cubeMesh->UploadStatic();
 
 	volume = scene->AddObject<VolumeRenderer>(L"Volume");
 	volume->mCubeMesh = cubeMesh;
 	volume->mShader = AssetDatabase::GetAsset<Shader>(L"Volume");
-	volume->LocalScale(.5f, .5f, .5f);
 }
 cdvis::~cdvis() {}
 
@@ -103,7 +101,7 @@ void cdvis::OnResize() {
 void BrowseVolume() {
 	jwstring folder = BrowseFolder();
 	if (folder.empty()) return;
-
+	volume->mTexture = Dicom::LoadVolume(folder);
 }
 
 void cdvis::WindowEvent(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -149,6 +147,15 @@ void cdvis::Update(double total, double delta) {
 			XMVECTOR delta = XMQuaternionRotationAxis(XMVector3Normalize(axis), sqrtf(md.x * md.x + md.y * md.y) * .003f);
 			volume->LocalRotation(XMQuaternionMultiply(XMLoadFloat4(&volume->LocalRotation()), delta));
 		}
+	}
+
+	if (Input::KeyDown(KeyCode::Up)) {
+		z += (float)delta;
+		camera->LocalPosition(0, 0, z);
+	}
+	if (Input::KeyDown(KeyCode::Down)) {
+		z -= (float)delta;
+		camera->LocalPosition(0, 0, z);
 	}
 }
 

@@ -26,12 +26,24 @@ void VolumeRenderer::Draw(shared_ptr<CommandList> commandList) {
 	if (!mCubeMesh || !mShader) return;
 	UpdateTransform();
 
+	commandList->PushState();
+
 	XMFLOAT4X4 vp = commandList->GetCamera()->ViewProjection();
 	XMFLOAT3 cp = commandList->GetCamera()->WorldPosition();
 
 	commandList->SetShader(mShader);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &ObjectToWorld(), 0);
-	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &vp, 16);
-	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 4, &cp, 32);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &WorldToObject(), 16);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &vp, 32);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 4, &cp, 48);
+
+	if (mTexture) {
+		ID3D12DescriptorHeap* heap = { mTexture->GetSRVDescriptorHeap().Get() };
+		commandList->D3DCommandList()->SetDescriptorHeaps(1, &heap);
+		commandList->D3DCommandList()->SetGraphicsRootDescriptorTable(1, mTexture->GetSRVGPUDescriptor());
+	}
+
+	commandList->SetCullMode(D3D12_CULL_MODE_FRONT);
 	commandList->DrawMesh(*mCubeMesh);
+	commandList->PopState();
 }
