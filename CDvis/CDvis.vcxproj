@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -71,13 +71,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ExecutablePath>$(JAE_HOME)\$(Platform)\$(Configuration);$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(JAE_HOME)\Jae3d;$(IncludePath)</IncludePath>
-    <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(LibraryPath)</LibraryPath>
+    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(IncludePath)</IncludePath>
+    <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ExecutablePath>$(JAE_HOME)\$(Platform)\$(Configuration);$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(JAE_HOME)\Jae3d;$(IncludePath)</IncludePath>
-    <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(LibraryPath)</LibraryPath>
+    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(IncludePath)</IncludePath>
+    <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -96,11 +96,12 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Jae3d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Jae3d.lib;openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.dll $(OutputPath) /q /y
+xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.pdb $(OutputPath) /q /y
 xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -131,11 +132,12 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Jae3d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Jae3d.lib;openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.dll $(OutputPath) /q /y
+xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.pdb $(OutputPath) /q /y
 xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -147,15 +149,22 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="cdvis.hpp" />
     <ClInclude Include="Dicom.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
+    <ClInclude Include="VRCamera.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CDialogEventHandler.cpp" />
     <ClCompile Include="cdvis.cpp" />
     <ClCompile Include="Dicom.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
+    <ClCompile Include="VRCamera.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Assets\Volume.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Assets\Cube.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

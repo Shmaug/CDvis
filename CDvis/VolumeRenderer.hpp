@@ -17,6 +17,9 @@ public:
 	std::shared_ptr<Mesh> mCubeMesh;
 	std::shared_ptr<Shader> mShader;
 
+	float mLightDensity;
+	float mDensity;
+
 	DirectX::BoundingOrientedBox Bounds();
 };
 

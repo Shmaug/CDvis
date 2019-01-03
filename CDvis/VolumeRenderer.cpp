@@ -7,7 +7,7 @@ using namespace std;
 using namespace DirectX;
 
 VolumeRenderer::VolumeRenderer() : VolumeRenderer(L"") {}
-VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name) {}
+VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name), mDensity(10.0f), mLightDensity(7.5f) {}
 VolumeRenderer::~VolumeRenderer() {}
 
 DirectX::BoundingOrientedBox VolumeRenderer::Bounds() {
@@ -31,11 +31,18 @@ void VolumeRenderer::Draw(shared_ptr<CommandList> commandList) {
 	XMFLOAT4X4 vp = commandList->GetCamera()->ViewProjection();
 	XMFLOAT3 cp = commandList->GetCamera()->WorldPosition();
 
+	XMFLOAT3 lightDir;
+	XMStoreFloat3(&lightDir, XMVector3TransformNormal(XMVector3Normalize(XMVectorSet(.1f, .1f, 1.0f, 1.0f)), XMLoadFloat4x4(&WorldToObject())));
+
+	commandList->SetMaterial(nullptr);
 	commandList->SetShader(mShader);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &ObjectToWorld(), 0);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &WorldToObject(), 16);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 16, &vp, 32);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 4, &cp, 48);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 3, &lightDir, 52);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 1, &mLightDensity, 55);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, 1, &mDensity, 56);
 
 	if (mTexture) {
 		ID3D12DescriptorHeap* heap = { mTexture->GetSRVDescriptorHeap().Get() };
@@ -43,7 +50,10 @@ void VolumeRenderer::Draw(shared_ptr<CommandList> commandList) {
 		commandList->D3DCommandList()->SetGraphicsRootDescriptorTable(1, mTexture->GetSRVGPUDescriptor());
 	}
 
+	commandList->SetBlendState(BLEND_STATE_ALPHA);
 	commandList->SetCullMode(D3D12_CULL_MODE_FRONT);
+	commandList->SetDepthTest(false);
+	commandList->SetDepthWrite(false);
 	commandList->DrawMesh(*mCubeMesh);
 	commandList->PopState();
 }
