@@ -17,6 +17,7 @@ public:
 	std::shared_ptr<Mesh> mCubeMesh;
 	std::shared_ptr<Shader> mShader;
 
+	bool mLighting;
 	float mLightDensity;
 	float mDensity;
 

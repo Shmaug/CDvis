@@ -3,6 +3,8 @@
 #include <Scene.hpp>
 #include <Graphics.hpp>
 
+#include "VRUtil.hpp"
+
 using namespace std;
 using namespace DirectX;
 
@@ -66,6 +68,25 @@ void VRCamera::CreateCameras(unsigned int resx, unsigned int resy){
 	gpuhandle.Offset(inc);
 	device->CreateShaderResourceView(mRightEyeTexture.Get(), &srvDesc, cpuhandle);
 	mRightEyeSRV = gpuhandle;
+}
+void VRCamera::UpdateCameras(vr::IVRSystem* hmd) {
+	VR2DX(hmd->GetEyeToHeadTransform(vr::EVREye::Eye_Left), mLeftEye.get());
+	VR2DX(hmd->GetEyeToHeadTransform(vr::EVREye::Eye_Right), mRightEye.get());
+
+	float l, r, t, b;
+	hmd->GetProjectionRaw(vr::EVREye::Eye_Left, &l, &r, &t, &b);
+	l *=  mLeftEye->Near();
+	r *=  mLeftEye->Near();
+	t *= -mLeftEye->Near();
+	b *= -mLeftEye->Near();
+	mLeftEye->PerspectiveBounds(XMFLOAT4(l, r, b, t));
+
+	hmd->GetProjectionRaw(vr::EVREye::Eye_Right, &l, &r, &t, &b);
+	l *=  mRightEye->Near();
+	r *=  mRightEye->Near();
+	t *= -mRightEye->Near();
+	b *= -mRightEye->Near();
+	mRightEye->PerspectiveBounds(XMFLOAT4(l, r, b, t));
 }
 
 bool VRCamera::UpdateTransform() {

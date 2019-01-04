@@ -2,6 +2,7 @@
 #pragma rootsig RootSig
 #pragma vertex vsmain
 #pragma pixel psmain
+#pragma multi_compile LIGHTING
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
@@ -79,10 +80,13 @@ float4 psmain(v2f i) : SV_Target{
 		float r = Volume.SampleLevel(Sampler, p, 0).r;
 		float d = Data.Density * r;
 
-		float4 c = float4(d, d, d, d * s);
+		float4 c = d;
+		c.a *= s;
 
+		#ifdef LIGHTING
 		float lr = Volume.SampleLevel(Sampler, p - Data.LightDirection * s, 0).r;
 		c.rgb *= exp(-lr * Data.LightDensity);
+		#endif
 
 		c.rgb *= c.a;
 		color += c * (1 - color.a);

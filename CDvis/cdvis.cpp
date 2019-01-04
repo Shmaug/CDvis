@@ -22,8 +22,7 @@
 #include <SpriteBatch.hpp>
 #include <Font.hpp>
 
-#include <openvr.h>
-
+#include "VRUtil.hpp"
 #include "Dicom.hpp"
 #include "VolumeRenderer.hpp"
 #include "VRCamera.hpp"
@@ -42,15 +41,11 @@ shared_ptr<VRCamera> vrCamera;
 shared_ptr<Scene> scene;
 shared_ptr<Font> arial;
 shared_ptr<VolumeRenderer> volume;
-shared_ptr<MeshRenderer> cube;
-shared_ptr<MeshRenderer> lcube;
-shared_ptr<MeshRenderer> rcube;
 
 // VR
-vr::IVRSystem *m_pHMD;
-vr::IVRRenderModels *m_pRenderModels;
-vr::TrackedDevicePose_t m_rTrackedDevicePose[vr::k_unMaxTrackedDeviceCount];
-bool m_rbShowTrackedDevice[vr::k_unMaxTrackedDeviceCount];
+vr::IVRSystem *hmd;
+vr::IVRRenderModels *vrRenderModels;
+vr::TrackedDevicePose_t vrTrackedDevices[vr::k_unMaxTrackedDeviceCount];
 
 wchar_t pbuf[1024]; // performance overlay text
 float frameTimes[128];
@@ -76,9 +71,9 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 
 	JaeMsgLoop(game);
 
-	if (m_pHMD) {
+	if (hmd) {
 		vr::VR_Shutdown();
-		m_pHMD = NULL;
+		hmd = NULL;
 	}
 	JaeDestroy();
 
@@ -86,17 +81,9 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 	return 0;
 }
 
-XMFLOAT4X4 VR2DX(vr::HmdMatrix34_t mat) {
-	return XMFLOAT4X4(
-		mat.m[0][0], mat.m[1][0], mat.m[2][0], 0.0,
-		mat.m[0][1], mat.m[1][1], mat.m[2][1], 0.0,
-	    mat.m[0][2], mat.m[1][2], mat.m[2][2], 0.0,
-		mat.m[0][3], mat.m[1][3], mat.m[2][3], 1.0f
-	);
-}
-bool InitializeVR() {
+bool cdvis::InitializeVR() {
 	vr::EVRInitError eError = vr::VRInitError_None;
-	m_pHMD = vr::VR_Init(&eError, vr::VRApplication_Scene);
+	hmd = vr::VR_Init(&eError, vr::VRApplication_Scene);
 	if (eError != vr::VRInitError_None) {
 		OutputDebugStringA("Failed to initialize VR: ");
 		OutputDebugStringA(vr::VR_GetVRInitErrorAsEnglishDescription(eError));
@@ -104,8 +91,8 @@ bool InitializeVR() {
 		return false;
 	}
 
-	m_pRenderModels = (vr::IVRRenderModels*)vr::VR_GetGenericInterface(vr::IVRRenderModels_Version, &eError);
-	if (!m_pRenderModels) {
+	vrRenderModels = (vr::IVRRenderModels*)vr::VR_GetGenericInterface(vr::IVRRenderModels_Version, &eError);
+	if (!vrRenderModels) {
 		vr::VR_Shutdown();
 		OutputDebugf(L"Failed to get render model interface: %s\n", vr::VR_GetVRInitErrorAsEnglishDescription(eError));
 		return false;
@@ -117,42 +104,12 @@ bool InitializeVR() {
 	}
 
 	unsigned int w, h;
-	m_pHMD->GetRecommendedRenderTargetSize(&w, &h);
+	hmd->GetRecommendedRenderTargetSize(&w, &h);
 
 	vrCamera = scene->AddObject<VRCamera>(L"VR Camera");
 	vrCamera->LocalPosition(0, 0, z);
 	vrCamera->CreateCameras(w, h);
-
-	XMVECTOR scale;
-	XMVECTOR pos;
-	XMVECTOR rot;
-	XMMatrixDecompose(&scale, &rot, &pos, XMLoadFloat4x4(&VR2DX(m_pHMD->GetEyeToHeadTransform(vr::EVREye::Eye_Left))));
-	vrCamera->LeftEye()->LocalPosition(XMVectorSetZ(pos, -XMVectorGetZ(pos)));
-	vrCamera->LeftEye()->LocalRotation(XMVectorSet(-XMVectorGetX(rot), -XMVectorGetY(rot), XMVectorGetZ(rot), XMVectorGetW(rot)));
-
-	XMMatrixDecompose(&scale, &rot, &pos, XMLoadFloat4x4(&VR2DX(m_pHMD->GetEyeToHeadTransform(vr::EVREye::Eye_Right))));
-	vrCamera->RightEye()->LocalPosition(XMVectorSetZ(pos, -XMVectorGetZ(pos)));
-	vrCamera->RightEye()->LocalRotation(XMVectorSet(-XMVectorGetX(rot), -XMVectorGetY(rot), XMVectorGetZ(rot), XMVectorGetW(rot)));
-
-	float ll, lr, lt, lb;
-	m_pHMD->GetProjectionRaw(vr::EVREye::Eye_Left, &ll, &lr, &lt, &lb);
-	float rl, rr, rt, rb;
-	m_pHMD->GetProjectionRaw(vr::EVREye::Eye_Right, &rl, &rr, &rt, &rb);
-
-	ll *= vrCamera->LeftEye()->Near();
-	lr *= vrCamera->LeftEye()->Near();
-	lt *= -vrCamera->LeftEye()->Near();
-	lb *= -vrCamera->LeftEye()->Near();
-	rl *= vrCamera->RightEye()->Near();
-	rr *= vrCamera->RightEye()->Near();
-	rt *= -vrCamera->RightEye()->Near();
-	rb *= -vrCamera->RightEye()->Near();
-
-	vrCamera->LeftEye()->PerspectiveBounds(XMFLOAT4(ll, lr, lb, lt));
-	vrCamera->RightEye()->PerspectiveBounds(XMFLOAT4(rl, rr, rb, rt));
-	cube->Parent(vrCamera);
-	lcube->Parent(vrCamera->LeftEye());
-	rcube->Parent(vrCamera->RightEye());
+	vrCamera->UpdateCameras(hmd);
 
 	return true;
 }
@@ -177,34 +134,13 @@ void cdvis::Initialize() {
 	vrCubeMesh->LoadCube(.1f);
 	vrCubeMesh->UploadStatic();
 
-	shared_ptr<Material> cubeMat = shared_ptr<Material>(new Material(L"Cube Material", AssetDatabase::GetAsset<Shader>(L"Cube")));
-
-	cube = scene->AddObject<MeshRenderer>(L"HMD Cube");
-	cube->mMesh = vrCubeMesh;
-	cube->mMaterial = cubeMat;
-	cube->LocalScale(.5f, .5f, .5f);
-
-	lcube = scene->AddObject<MeshRenderer>(L"Left Eye Cube");
-	lcube->mMesh = vrCubeMesh;
-	lcube->mMaterial = cubeMat;
-	lcube->LocalScale(.25f, .25f, .5f);
-
-	rcube = scene->AddObject<MeshRenderer>(L"Right Eye Cube");
-	rcube->mMesh = vrCubeMesh;
-	rcube->mMaterial = cubeMat;
-	rcube->LocalScale(.25f, .2f, .5f);
-
-	cube->mVisible = false;
-	lcube->mVisible = false;
-	rcube->mVisible = false;
-
 	volume = scene->AddObject<VolumeRenderer>(L"Volume");
 	volume->mCubeMesh = cubeMesh;
 	volume->LocalPosition(0, 1, 0);
 	volume->mShader = AssetDatabase::GetAsset<Shader>(L"Volume");
 
 	if (!InitializeVR()) {
-		m_pHMD = nullptr;
+		hmd = nullptr;
 		OutputDebugString(L"Failed to initialize VR\n");
 		vrCamera = nullptr;
 	}
@@ -218,7 +154,7 @@ void cdvis::OnResize() {
 	windowCamera->CreateRenderBuffers();
 }
 
-void BrowseImage() {
+void cdvis::BrowseImage() {
 	jwstring file = BrowseFile();
 	if (file.empty()) return;
 
@@ -230,7 +166,7 @@ void BrowseImage() {
 	size.z *= 2.0f;
 	volume->LocalScale(size);
 }
-void BrowseVolume() {
+void cdvis::BrowseVolume() {
 	jwstring folder = BrowseFolder();
 	if (folder.empty()) return;
 
@@ -251,7 +187,7 @@ void cdvis::WindowEvent(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 			BrowseVolume();
 	}
 }
-void VREvent(const vr::VREvent_t & event) {
+void cdvis::VREvent(const vr::VREvent_t & event) {
 	switch (event.eventType) {
 	case vr::VREvent_TrackedDeviceActivated:
 	{
@@ -261,22 +197,6 @@ void VREvent(const vr::VREvent_t & event) {
 	case vr::VREvent_TrackedDeviceDeactivated:
 	case vr::VREvent_TrackedDeviceUpdated:
 	break;
-	}
-}
-
-void UpdateHMDPose(){
-	if (!m_pHMD) return;
-
-	vr::VRCompositor()->WaitGetPoses(m_rTrackedDevicePose, vr::k_unMaxTrackedDeviceCount, NULL, 0);
-
-	if (m_rTrackedDevicePose[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid) {
-		XMVECTOR scale;
-		XMVECTOR pos;
-		XMVECTOR rot;
-		XMMatrixDecompose(&scale, &rot, &pos, XMLoadFloat4x4(&VR2DX(m_rTrackedDevicePose[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking)));
-
-		vrCamera->LocalPosition(XMVectorSetZ(pos, -XMVectorGetZ(pos)));
-		vrCamera->LocalRotation(XMVectorSet(-XMVectorGetX(rot), -XMVectorGetY(rot), XMVectorGetZ(rot), XMVectorGetW(rot)));
 	}
 }
 
@@ -292,21 +212,17 @@ void cdvis::Update(double total, double delta) {
 	if (Input::OnKeyDown(KeyCode::F2))
 		debugDraw = !debugDraw;
 
+	if (Input::OnKeyDown(KeyCode::G))
+		volume->mLighting = !volume->mLighting;
 	
-	if (m_pHMD) {
+	if (hmd) {
 		// Process SteamVR events
 		vr::VREvent_t event;
-		while (m_pHMD->PollNextEvent(&event, sizeof(event))) {
+		while (hmd->PollNextEvent(&event, sizeof(event)))
 			VREvent(event);
-		}
 
-		// Process SteamVR controller state
-		for (vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++) {
-			vr::VRControllerState_t state;
-			if (m_pHMD->GetControllerState(unDevice, &state, sizeof(state))) {
-				m_rbShowTrackedDevice[unDevice] = state.ulButtonPressed == 0;
-			}
-		}
+		if (vrTrackedDevices[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
+			VR2DX(vrTrackedDevices[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking, vrCamera.get());
 	}
 
 	#pragma region PC controls
@@ -370,16 +286,16 @@ void cdvis::DoFrame() {
 
 	Profiler::FrameStart();
 
-#pragma region update
+	#pragma region update
 	Profiler::BeginSample(L"Update");
 	auto t1 = clock.now();
 	double delta = (t1 - t0).count() * 1e-9;
 	t0 = t1;
 	Update((t1 - start).count() * 1e-9, delta);
 	Profiler::EndSample();
-#pragma endregion
+	#pragma endregion
 
-#pragma region render
+	#pragma region render
 	Profiler::BeginSample(L"Render");
 	auto commandQueue = Graphics::GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	auto commandList = commandQueue->GetCommandList(Graphics::CurrentFrameIndex());
@@ -389,7 +305,7 @@ void cdvis::DoFrame() {
 	window->PrepareRender(commandList);
 
 	if (wireframe) commandList->SetFillMode(D3D12_FILL_MODE_WIREFRAME);
-	if (m_pHMD) {
+	if (hmd) {
 		Render(vrCamera->LeftEye(), commandList);
 		Render(vrCamera->RightEye(), commandList);
 		vrCamera->ResolveEyeTextures(commandList);
@@ -441,8 +357,8 @@ void cdvis::DoFrame() {
 	commandList->TransitionResource(winrt, D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	window->Present(commandList, commandQueue);
 
-	// Submit VR frames
-	if (m_pHMD) {
+	// Submit VR textures
+	if (hmd) {
 		vr::VRTextureBounds_t bounds;
 		bounds.uMin = 0.0f;
 		bounds.uMax = 1.0f;
@@ -459,7 +375,8 @@ void cdvis::DoFrame() {
 	}
 
 	Profiler::EndSample();
-#pragma endregion
+	#pragma endregion
+
 	Input::FrameEnd();
 	Profiler::FrameEnd();
 
@@ -481,5 +398,6 @@ void cdvis::DoFrame() {
 		frameTimeIndex = (frameTimeIndex + 1) % 128;
 	}
 
-	UpdateHMDPose();
+	if (hmd)
+		vr::VRCompositor()->WaitGetPoses(vrTrackedDevices, vr::k_unMaxTrackedDeviceCount, NULL, 0);
 }

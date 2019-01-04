@@ -3,6 +3,7 @@
 #include <wrl.h>
 #include <Camera.hpp>
 #include <CommandList.hpp>
+#include <openvr.h>
 
 class VRCamera : public Object {
 public:
@@ -10,6 +11,8 @@ public:
 	~VRCamera();
 
 	void CreateCameras(unsigned int resx, unsigned int resy);
+	void UpdateCameras(vr::IVRSystem* hmd);
+
 	std::shared_ptr<Camera> LeftEye() const { return mLeftEye; }
 	std::shared_ptr<Camera> RightEye() const { return mRightEye; }
 

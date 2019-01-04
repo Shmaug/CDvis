@@ -150,6 +150,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="Dicom.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
     <ClInclude Include="VRCamera.hpp" />
+    <ClInclude Include="VRUtil.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CDialogEventHandler.cpp" />
@@ -157,6 +158,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClCompile Include="Dicom.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
     <ClCompile Include="VRCamera.cpp" />
+    <ClCompile Include="VRUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Assets\Volume.hlsl">

@@ -28,6 +28,11 @@ void VolumeRenderer::Draw(shared_ptr<CommandList> commandList) {
 
 	commandList->PushState();
 
+	if (mLighting)
+		commandList->EnableKeyword("LIGHTING");
+	else
+		commandList->DisableKeyword("LIGHTING");
+
 	XMFLOAT4X4 vp = commandList->GetCamera()->ViewProjection();
 	XMFLOAT3 cp = commandList->GetCamera()->WorldPosition();
 
