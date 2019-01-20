@@ -61,9 +61,9 @@ shared_ptr<Texture> Dicom::LoadImage(jwstring path, XMFLOAT3 &size) {
 
 	shared_ptr<Texture> tex = shared_ptr<Texture>(new Texture(
 		L"MRI Volume", w, h, d,
-		D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16_UNORM, ALPHA_MODE_UNUSED, 0, data, w * h * d * sizeof(uint16_t), false
+		D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16_UNORM, 1, data, w * h * d * sizeof(uint16_t), false
 	));
-	tex->Upload();
+	tex->Upload(D3D12_RESOURCE_FLAG_NONE, false);
 
 	delete[] data;
 	delete image;
@@ -87,12 +87,11 @@ void GetFiles(jwstring folder, jvector<jstring> &files) {
 		if (ffd.cFileName[0] == L'.') continue;
 
 		jstring c = path + "\\" + jstring(ffd.cFileName);
-		//if (GetExt(c) != "dcm") continue;
 
 		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 			// file is a directory
 		} else
-			files.push_back(GetFullPath(c));
+			files.push_back(GetFullPathA(c));
 	} while (FindNextFileA(hFind, &ffd) != 0);
 
 	FindClose(hFind);
@@ -148,9 +147,9 @@ shared_ptr<Texture> Dicom::LoadVolume(jwstring path, DirectX::XMFLOAT3 &size) {
 
 	shared_ptr<Texture> tex = shared_ptr<Texture>(new Texture(
 		L"MRI Volume", w, h, d, 
-		D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16_UNORM, ALPHA_MODE_UNUSED, 0, data, w * h * d * sizeof(uint16_t), false
+		D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16_UNORM, 1, data, w * h * d * sizeof(uint16_t), false
 	));
-	tex->Upload();
+	tex->Upload(D3D12_RESOURCE_FLAG_NONE, false);
 
 	for (unsigned int i = 0; i < images.size(); i++)
 		delete images[i];

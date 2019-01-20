@@ -8,6 +8,8 @@
 using namespace std;
 using namespace DirectX;
 
+#define F2D(x) (int)x, (int)((x - floor(x)) * 10.0f)
+
 VRCamera::VRCamera(jwstring name) : Object(name) {}
 VRCamera::~VRCamera() {}
 
@@ -15,12 +17,10 @@ void VRCamera::CreateCameras(unsigned int resx, unsigned int resy){
 	mLeftEye = shared_ptr<Camera>(new Camera(mName + L" Left Eye"));
 	GetScene()->AddObject(mLeftEye);
 	mLeftEye->Parent(shared_from_this());
-	mLeftEye->LocalPosition(-.03f, 0, .025f);
 
 	mRightEye = shared_ptr<Camera>(new Camera(mName + L" Right Eye"));
 	GetScene()->AddObject(mRightEye);
 	mRightEye->Parent(shared_from_this());
-	mRightEye->LocalPosition(.03f, 0, .025f);
 
 	mLeftEye->PixelWidth(resx);
 	mLeftEye->PixelHeight(resy);
@@ -72,6 +72,10 @@ void VRCamera::CreateCameras(unsigned int resx, unsigned int resy){
 void VRCamera::UpdateCameras(vr::IVRSystem* hmd) {
 	VR2DX(hmd->GetEyeToHeadTransform(vr::EVREye::Eye_Left), mLeftEye.get());
 	VR2DX(hmd->GetEyeToHeadTransform(vr::EVREye::Eye_Right), mRightEye.get());
+
+	// TODO: why do i need to multiply this by .5???
+	mLeftEye->LocalPosition(.5f * mLeftEye->LocalPosition().x, mLeftEye->LocalPosition().y * .5f, mLeftEye->LocalPosition().z * .5f);
+	mRightEye->LocalPosition(.5f * mRightEye->LocalPosition().x, mRightEye->LocalPosition().y * .5f, mRightEye->LocalPosition().z * .5f);
 
 	float l, r, t, b;
 	hmd->GetProjectionRaw(vr::EVREye::Eye_Left, &l, &r, &t, &b);

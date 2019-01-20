@@ -166,7 +166,12 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Assets\Cube.hlsl">
+    <None Include="..\Assets\device.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Assets\DepthPass.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

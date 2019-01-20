@@ -10,11 +10,11 @@ XMFLOAT4X4 VR2DX(vr::HmdMatrix34_t& mat) {
 		mat.m[0][3], mat.m[1][3], mat.m[2][3], 1.0f
 	);
 }
-void VR2DX(vr::HmdMatrix34_t& mat, Object* obj) {
+void VR2DX(XMMATRIX mat, Object* obj) {
 	XMVECTOR scale;
 	XMVECTOR pos;
 	XMVECTOR rot;
-	XMMatrixDecompose(&scale, &rot, &pos, XMLoadFloat4x4(&VR2DX(mat)));
+	XMMatrixDecompose(&scale, &rot, &pos, mat);
 
 	XMFLOAT3 pos3;
 	XMStoreFloat3(&pos3, pos);
@@ -28,4 +28,8 @@ void VR2DX(vr::HmdMatrix34_t& mat, Object* obj) {
 
 	obj->LocalPosition(pos3);
 	obj->LocalRotation(rot4);
+}
+
+void VR2DX(vr::HmdMatrix34_t& mat, Object* obj) {
+	VR2DX(XMLoadFloat4x4(&VR2DX(mat)), obj);
 }

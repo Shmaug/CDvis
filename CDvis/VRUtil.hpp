@@ -5,4 +5,5 @@
 #include <object.hpp>
 
 DirectX::XMFLOAT4X4 VR2DX(vr::HmdMatrix34_t& mat);
+void VR2DX(DirectX::XMMATRIX mat, Object* obj);
 void VR2DX(vr::HmdMatrix34_t& mat, Object* obj);

@@ -17,7 +17,8 @@
   <ItemGroup>
     <None Include="packages.config" />
     <None Include="..\Assets\Volume.hlsl" />
-    <None Include="..\Assets\Cube.hlsl" />
+    <None Include="..\Assets\device.hlsl" />
+    <None Include="..\Assets\DepthPass.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cdvis.hpp">
