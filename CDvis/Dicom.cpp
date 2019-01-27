@@ -6,6 +6,8 @@
 #include <dcmtk/dcmimgle/dcmimage.h>
 #include <dcmtk/dcmdata/dctk.h>
 
+#include <algorithm>
+
 // DCMTK libraries (order matters)
 #pragma comment(lib, "ws2_32")
 #pragma comment(lib, "Iphlpapi.lib")
@@ -90,7 +92,7 @@ void GetFiles(jwstring folder, jvector<jstring> &files) {
 
 		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 			// file is a directory
-		} else
+		} else if (GetExtA(c) == "dcm")
 			files.push_back(GetFullPathA(c));
 	} while (FindNextFileA(hFind, &ffd) != 0);
 
@@ -105,26 +107,44 @@ shared_ptr<Texture> Dicom::LoadVolume(jwstring path, DirectX::XMFLOAT3 &size) {
 	jvector<jstring> files;
 	GetFiles(path, files);
 
-	jvector<DicomImage*> images(files.size());
-	for (unsigned int i = 0; i < files.size(); i++) {
-		images.push_back(new DicomImage(files[i].c_str()));
-		assert(images[i] != NULL);
-		assert(images[i]->getStatus() == EIS_Normal);
-	}
+	struct Slice {
+		DicomImage* image;
+		double location;
+	};
+
+	jvector<Slice> images(files.size());
 
 	// Get information
-	DcmFileFormat fileFormat;
-	assert(fileFormat.loadFile(files[0].c_str()).good());
-	DcmDataset* dataset = fileFormat.getDataset();
 	double spacingX;
 	double spacingY;
 	double thickness;
-	dataset->findAndGetFloat64(DCM_PixelSpacing, spacingX, 0);
-	dataset->findAndGetFloat64(DCM_PixelSpacing, spacingY, 1);
-	dataset->findAndGetFloat64(DCM_SliceThickness, thickness, 0);
 
-	unsigned int w = images[0]->getWidth();
-	unsigned int h = images[0]->getHeight();
+	for (unsigned int i = 0; i < files.size(); i++) {
+		DcmFileFormat fileFormat;
+		assert(fileFormat.loadFile(files[i].c_str()).good());
+		DcmDataset* dataset = fileFormat.getDataset();
+
+		if (i == 0) {
+			dataset->findAndGetFloat64(DCM_PixelSpacing, spacingX, 0);
+			dataset->findAndGetFloat64(DCM_PixelSpacing, spacingY, 1);
+			dataset->findAndGetFloat64(DCM_SliceThickness, thickness, 0);
+		}
+
+		double x;
+		dataset->findAndGetFloat64(DCM_SliceLocation, x, 0);
+
+		DicomImage* img = new DicomImage(files[i].c_str());
+		assert(img != NULL);
+		assert(img->getStatus() == EIS_Normal);
+		images.push_back({ img, x });
+	}
+	
+	std::sort(images.data(), images.data() + images.size(), [](const Slice& a, const Slice& b) {
+		return a.location < b.location;
+	});
+
+	unsigned int w = images[0].image->getWidth();
+	unsigned int h = images[0].image->getHeight();
 	unsigned int d = (unsigned int)images.size();
 
 	// volume size in meters
@@ -140,8 +160,8 @@ shared_ptr<Texture> Dicom::LoadVolume(jwstring path, DirectX::XMFLOAT3 &size) {
 	ZeroMemory(data, w * h * d * sizeof(uint16_t));
 
 	for (unsigned int i = 0; i < images.size(); i++) {
-		images[i]->setMinMaxWindow();
-		uint16_t* pixelData = (uint16_t*)images[i]->getOutputData(16);
+		images[i].image->setMinMaxWindow();
+		uint16_t* pixelData = (uint16_t*)images[i].image->getOutputData(16);
 		memcpy(data + w*h*i, pixelData, w * h * sizeof(uint16_t));
 	}
 
@@ -152,7 +172,7 @@ shared_ptr<Texture> Dicom::LoadVolume(jwstring path, DirectX::XMFLOAT3 &size) {
 	tex->Upload(D3D12_RESOURCE_FLAG_NONE, false);
 
 	for (unsigned int i = 0; i < images.size(); i++)
-		delete images[i];
+		delete images[i].image;
 
 	delete[] data;
 	return tex;
