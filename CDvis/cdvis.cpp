@@ -17,10 +17,12 @@
 #include <SpriteBatch.hpp>
 #include <Font.hpp>
 
-#include "VRUtil.hpp"
 #include "Dicom.hpp"
 #include "VolumeRenderer.hpp"
+#include "VRUtil.hpp"
 #include "VRCamera.hpp"
+#include "VRDevice.hpp"
+#include "VRTools.hpp"
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "runtimeobject.lib")
@@ -81,11 +83,8 @@ bool cdvis::InitializeVR() {
 	mHmd->GetRecommendedRenderTargetSize(&w, &h);
 
 	mVRCamera = mScene->AddObject<VRCamera>(L"VR Camera");
-	mVRCamera->LocalPosition(0, 0, mCameraZ);
 	mVRCamera->CreateCameras(w, h);
 	mVRCamera->UpdateCameras(mHmd);
-
-	mVRMaterial = shared_ptr<Material>(new Material(L"Device", AssetDatabase::GetAsset<Shader>(L"device")));
 
 	mVRDevices.reserve(vr::k_unMaxTrackedDeviceCount);
 	for (unsigned int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
@@ -98,6 +97,7 @@ bool cdvis::InitializeVR() {
 void cdvis::Initialize() {
 	AssetDatabase::LoadAssets(L"core.asset");
 	AssetDatabase::LoadAssets(L"assets.asset");
+	AssetDatabase::LoadAssets(L"shaders.asset");
 
 	mScene = make_shared<Scene>();
 
@@ -106,13 +106,31 @@ void cdvis::Initialize() {
 
 	mWindowCamera = mScene->AddObject<Camera>(L"Window Camera");
 
-	mDepthMaterial = shared_ptr<Material>(new Material(L"Depth", AssetDatabase::GetAsset<Shader>(L"DepthPass")));
-
 	mVolume = mScene->AddObject<VolumeRenderer>(L"Volume");
 	mVolume->LocalPosition(0, 1, 0);
 
 	XMFLOAT3 vp = mVolume->LocalPosition();
 	mWindowCamera->LocalPosition(vp.x, vp.y, vp.z + mCameraZ);
+
+	auto concrete = AssetDatabase::GetAsset<Texture>(L"concrete_diffuse");
+	concrete->Upload();
+	auto concreteBump = AssetDatabase::GetAsset<Texture>(L"concrete_normal");
+	concreteBump->Upload();
+	auto floorMesh = shared_ptr<Mesh>(new Mesh(L"Floor"));
+	floorMesh->LoadQuad(10.0f, 0, 1);
+	floorMesh->UploadStatic();
+	auto floorMat = shared_ptr<Material>(new Material(L"Floor", AssetDatabase::GetAsset<Shader>(L"textured_bump")));
+	floorMat->SetDescriptorTable("Textures", shared_ptr<DescriptorTable>(DescriptorTable::Create(L"Floor", concrete, concreteBump)), -1);
+	floorMat->SetFloat4("TextureST", { 8, 8, 0, 0 }, -1);
+
+	mFloor = mScene->AddObject<MeshRenderer>(L"Floor");
+	mFloor->SetMesh(floorMesh);
+	mFloor->SetMaterial(floorMat);
+
+	mVRTools = mScene->AddObject<VRTools>(L"VR Tool Menu");
+	mVRTools->InitTools();
+	mVRTools->mLight->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PIDIV4, XM_PIDIV4, 0));
+	mVRTools->mLight->LocalPosition(XMVector3Rotate(XMVectorSet(0, 0, -2, 0), XMLoadFloat4(&mVRTools->mLight->LocalRotation())));
 
 	if (!InitializeVR()) {
 		OutputDebugString(L"Failed to initialize VR\n");
@@ -157,18 +175,6 @@ void cdvis::WindowEvent(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 			BrowseVolume();
 	}
 }
-void cdvis::VREvent(const vr::VREvent_t & event) {
-	switch (event.eventType) {
-	case vr::VREvent_TrackedDeviceActivated:
-	{
-		//SetupRenderModelForTrackedDevice(event.trackedDeviceIndex);
-	}
-	break;
-	case vr::VREvent_TrackedDeviceDeactivated:
-	case vr::VREvent_TrackedDeviceUpdated:
-	break;
-	}
-}
 
 void cdvis::VRGetRenderModel(unsigned int index, MeshRenderer* renderer) {
 	unsigned int len = mHmd->GetStringTrackedDeviceProperty(index, vr::TrackedDeviceProperty::Prop_RenderModelName_String, NULL, 0);
@@ -192,10 +198,13 @@ void cdvis::VRGetRenderModel(unsigned int index, MeshRenderer* renderer) {
 	}
 
 	if (mVRMeshes.count(name)) {
+		// we've already created this mesh earlier
 		renderer->SetMesh(mVRMeshes.at(name));
-		auto mat = shared_ptr<Material>(new Material(L"VR Render Model", AssetDatabase::GetAsset<Shader>(L"device")));
+		auto mat = shared_ptr<Material>(new Material(L"VR Render Model", AssetDatabase::GetAsset<Shader>(L"textured")));
+		mat->RenderQueue(1000);
 		mat->SetTexture("Texture", mVRTextures.at(renderModel->diffuseTextureId), -1);
 		renderer->SetMaterial(mat);
+		return;
 	}
 
 	shared_ptr<Mesh> mesh = shared_ptr<Mesh>(new Mesh(L"VR Render Model"));
@@ -227,7 +236,8 @@ void cdvis::VRGetRenderModel(unsigned int index, MeshRenderer* renderer) {
 	mVRTextures.emplace(renderModel->diffuseTextureId, texture);
 
 	renderer->SetMesh(mesh);
-	auto mat = shared_ptr<Material>(new Material(L"VR Render Model", AssetDatabase::GetAsset<Shader>(L"device")));
+	auto mat = shared_ptr<Material>(new Material(L"VR Render Model", AssetDatabase::GetAsset<Shader>(L"textured")));
+	mat->RenderQueue(1000);
 	mat->SetTexture("Texture", texture, -1);
 	renderer->SetMaterial(mat);
 
@@ -238,7 +248,8 @@ void cdvis::VRGetRenderModel(unsigned int index, MeshRenderer* renderer) {
 }
 
 void cdvis::VRCreateDevice(unsigned int index) {
-	mVRDevices[index] = mScene->AddObject<MeshRenderer>(L"VR Controller");
+	mVRDevices[index] = shared_ptr<VRDevice>(new VRDevice(L"VR Device", index));
+	mScene->AddObject(mVRDevices[index]);
 	VRGetRenderModel(index, mVRDevices[index].get());
 }
 
@@ -250,60 +261,65 @@ void cdvis::Update(double total, double delta) {
 		window->Close();
 
 	if (Input::OnKeyDown(KeyCode::F1))
-		mWireframe = !mWireframe;
+		mPerfOverlay = !mPerfOverlay;
 	if (Input::OnKeyDown(KeyCode::F2))
 		mDebugDraw = !mDebugDraw;
+	if (Input::OnKeyDown(KeyCode::F3))
+		mWireframe = !mWireframe;
 
-	if (Input::OnKeyDown(KeyCode::D))
-		mVolume->mDepthColor = !mVolume->mDepthColor;
 	if (Input::OnKeyDown(KeyCode::G))
 		mVolume->mLightingEnable = !mVolume->mLightingEnable;
+	if (Input::OnKeyDown(KeyCode::H))
+		mVolume->mISOEnable = !mVolume->mISOEnable;
 
 	if (Input::OnKeyDown(KeyCode::V))
 		mVREnable = !mVREnable;
 	
-	mVolume->mSlicePlaneEnable = false;
+	#pragma region VR Controls
+	static jvector<shared_ptr<VRDevice>> trackedControllers;
 	if (mHmd) {
-		// Process SteamVR events
+		// Process SteamVR events (controller added/removed/etc)
 		vr::VREvent_t event;
-		while (mHmd->PollNextEvent(&event, sizeof(event)))
-			VREvent(event);
+		while (mHmd->PollNextEvent(&event, sizeof(event))) {}
 
-		if (mVRTrackedDevices[vr::k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
-			VR2DX(mVRTrackedDevices[vr::k_unTrackedDeviceIndex_Hmd].mDeviceToAbsoluteTracking, mVRCamera.get());
+		// Gather input from tracked controllers and convert to VRController class
 
 		bool drawControllers = !mHmd->IsSteamVRDrawingControllers();
+		trackedControllers.clear();
 
 		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
-			// update tracking
-			if (mVRTrackedDevices[i].bPoseIsValid) {
-				if (!mVRDevices[i]) VRCreateDevice(i);
-				VR2DX(mVRTrackedDevices[i].mDeviceToAbsoluteTracking, mVRDevices[i].get());
-				mVRDevices[i]->mVisible = drawControllers;
-			} else
+			if (!mVRTrackedDevices[i].bPoseIsValid) {
+				// don't draw or update if the device's pose isn't valid
 				if (mVRDevices[i]) mVRDevices[i]->mVisible = false;
+				continue;
+			}
 
-			// Process SteamVR controller state
+			if (!mVRDevices[i]) VRCreateDevice(i);
+
+			// don't draw devices if SteamVR is drawing them already (in SteamVR menu, etc)
+			mVRDevices[i]->mVisible = drawControllers;
+			mVRDevices[i]->UpdateDevice(mHmd, mVRTrackedDevices[i]);
+
+			// Process device input
 			switch (mHmd->GetTrackedDeviceClass(i)) {
 			case vr::TrackedDeviceClass_Controller:
-			{
-				vr::VRControllerState_t state;
-				if (mHmd->GetControllerState(i, &state, sizeof(state))) {
-					if (state.ulButtonPressed) {
-						mVolume->mSlicePlaneEnable = true;
-						XMVECTOR n = XMVector3Rotate(XMVectorSet(0, 1, 0, 0), XMLoadFloat4(&mVRDevices[i]->WorldRotation()));
-						XMStoreFloat3((XMFLOAT3*)&mVolume->mSlicePlane, n);
-						mVolume->mSlicePlane.w = XMVectorGetX(XMVector3Dot(XMLoadFloat3(&mVRDevices[i]->WorldPosition()), n));
-					}
-				}
+				trackedControllers.push_back(mVRDevices[i]);
 				break;
-			}
+
+			case vr::TrackedDeviceClass_HMD:
+				mVRDevices[i]->mVisible = !mVREnable; // don't draw the headset mesh when in VR
+				mVRCamera->LocalPosition(mVRDevices[i]->DevicePosition());
+				mVRCamera->LocalRotation(mVRDevices[i]->DeviceRotation());
+				break;
+
+			default:
+				break;
 			}
 		}
 
-		if (mVRDevices[vr::k_unTrackedDeviceIndex_Hmd] && mVRDevices[vr::k_unTrackedDeviceIndex_Hmd]->mVisible)
-			mVRDevices[vr::k_unTrackedDeviceIndex_Hmd]->mVisible = !mVREnable;
+		mVRTools->ProcessInput(trackedControllers, mVolume);
 	}
+	#pragma endregion
 
 	#pragma region PC controls
 	if (Input::MouseWheelDelta() != 0) {
@@ -338,21 +354,33 @@ void cdvis::Update(double total, double delta) {
 		}
 	}
 
-	if (Input::KeyDown(KeyCode::Up))
-		mVolume->mLightDensity += 1.5f * (float)delta;
-	if (Input::KeyDown(KeyCode::Down))
-		mVolume->mLightDensity -= 1.5f * (float)delta;
-
-	if (Input::KeyDown(KeyCode::Right))
-		mVolume->mDensity += 1.5f * (float)delta;
-	if (Input::KeyDown(KeyCode::Left))
+	if (Input::KeyDown(KeyCode::W))
 		mVolume->mDensity -= 1.5f * (float)delta;
+	if (Input::KeyDown(KeyCode::E))
+		mVolume->mDensity += 1.5f * (float)delta;
+
+	if (Input::KeyDown(KeyCode::S))
+		mVolume->mLightDensity -= 1.5f * (float)delta;
+	if (Input::KeyDown(KeyCode::D))
+		mVolume->mLightDensity += 1.5f * (float)delta;
+
+	if (Input::KeyDown(KeyCode::X))
+		mVolume->mExposure -= 1.5f * (float)delta;
+	if (Input::KeyDown(KeyCode::C))
+		mVolume->mExposure += 1.5f * (float)delta;
 	#pragma endregion
 }
 
 void cdvis::Render(shared_ptr<Camera> cam, shared_ptr<CommandList> commandList) {
 	commandList->SetCamera(cam);
-	cam->Clear(commandList);
+	cam->Clear(commandList, { .2f, .2f, .2f, 0.0f });
+	commandList->SetGlobalFloat4("Ambient", { .6f, .6f, .6f, 1.0f });
+	commandList->SetGlobalFloat3("LightColor", { 0.5f, 0.5f, 0.5f });
+	XMFLOAT3 lp;
+	XMVECTOR lpv = XMVector3Rotate(XMVectorSet(0, 0, -1, 0), XMLoadFloat4(&mVRTools->mLight->WorldRotation()));
+	XMStoreFloat3(&lp, lpv);
+	commandList->SetGlobalFloat4("LightPosition", { lp.x, lp.y, lp.z, 0.0f });
+	mVolume->mLightDir = lp;
 	mScene->Draw(commandList, cam);
 	if (mDebugDraw) mScene->DebugDraw(commandList, cam);
 }
@@ -391,38 +419,64 @@ void cdvis::DoFrame() {
 	if (mVREnable) {
 		Render(mVRCamera->LeftEye(), commandList);
 		Render(mVRCamera->RightEye(), commandList);
-		// eye textures
+
+		// draw eye textures to window
+		Profiler::BeginSample(L"Draw Eyes");
 		mVRCamera->ResolveEyeTextures(commandList);
 		commandList->SetCamera(mWindowCamera);
 		commandList->SetFillMode(D3D12_FILL_MODE_SOLID);
-		mWindowCamera->Clear(commandList);
+		mWindowCamera->Clear(commandList, { .2f, .2f, .2f, 0.0f });
 		float w = (float)window->GetWidth();
 		float h = (float)window->GetHeight();
 		sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(), XMFLOAT4(0, 0, w*.5f, w*1.1111f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
 		sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f, 0, w, w*1.111f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+		Profiler::EndSample();
 	} else {
 		Render(mWindowCamera, commandList);
 	}
 
 #pragma region window overlay
-	sb->DrawTextf(mArial, XMFLOAT2(mWindowCamera->PixelWidth() * .5f, (float)mArial->GetAscender() * .5f), .5f, { 1,1,1,1 }, L"Density: %d.%d\nLight: %d.%d", F2D(mVolume->mDensity), F2D(mVolume->mLightDensity));
+	Profiler::BeginSample(L"Window Overlay");
+	sb->DrawTextf(mArial, XMFLOAT2(mWindowCamera->PixelWidth() * .5f, (float)mArial->GetAscender() * .4f), .4f, { 1,1,1,1 }, 
+		L"Density: %d.%d\nLight: %d.%d\nExposure: %d.%d", F2D(mVolume->mDensity), F2D(mVolume->mLightDensity), F2D(mVolume->mExposure));
+	sb->DrawTextf(mArial, XMFLOAT2(5.0f, (float)mArial->GetAscender() * .4f), .4f, { 1,1,1,1 }, L"FPS: %d.%d\n", F2D(mfps));
 
-	sb->DrawTextf(mArial, XMFLOAT2(10.0f, (float)mArial->GetAscender() * .5f), .5f, { 1,1,1,1 }, L"FPS: %d.%d\n", F2D(mfps));
-	sb->DrawTextf(mArial, XMFLOAT2(10.0f, (float)mArial->GetAscender()), .5f, { 1,1,1,1 }, mPerfBuffer);
+	if (mPerfOverlay) {
+	sb->DrawTextf(mArial, XMFLOAT2(5.0f, mWindowCamera->PixelHeight() - 200.0f), .4f, { 1,1,1,1 },
+		L"ctrl-o: open volume (dicom folder)\n"
+		L"ctrl-i: open single image slice\n"
+		L"g: toggle volume lighting\n"
+		L"h: toggle volume iso\n"
+		L"w/e: adjust density\n"
+		L"s/d: adjust light penetration\n"
+		L"x/c: adjust exposure\n"
+		L"v: toggle vr\n"
+		L"F1: toggle window overlay\n"
+		L"F2: toggle debug\n"
+		L"F3: toggle wireframe\n"
+		L"vive touchpad: plane slice\n"
+		L"vive grip: move volume\n",
+		F2D(mVolume->mDensity), F2D(mVolume->mLightDensity));
 
-	jvector<XMFLOAT3> verts;
-	jvector<XMFLOAT4> colors;
-	for (int i = 1; i < 128; i++) {
-		int d = mFrameTimeIndex - i; if (d < 0) d += 128;
-		verts.push_back({ 512.0f - i * 4.0f, mWindowCamera->PixelHeight() - mFrameTimes[d] * 5000, 0 });
-		float r = fmin(mFrameTimes[d] / .025f, 1.0f); // full red < 40fps
-		r *= r;
-		colors.push_back({ r, 1.0f - r, 0, 1 });
+		sb->DrawTextf(mArial, XMFLOAT2(5.0f, (float)mArial->GetAscender()), .4f, { 1,1,1,1 }, mPerfBuffer);
+
+		jvector<XMFLOAT3> verts;
+		jvector<XMFLOAT4> colors;
+		for (int i = 1; i < 128; i++) {
+			int d = mFrameTimeIndex - i; if (d < 0) d += 128;
+			verts.push_back({ 512.0f - i * 4.0f, mWindowCamera->PixelHeight() - mFrameTimes[d] * 5000, 0 });
+			float r = fmin(mFrameTimes[d] / .025f, 1.0f); // full red < 40fps
+			r *= r;
+			colors.push_back({ r, 1.0f - r, 0, 1 });
+		}
+		sb->DrawLines(verts, colors);
 	}
-	sb->DrawLines(verts, colors);
-
-	sb->Flush(commandList);
+	Profiler::EndSample();
 #pragma endregion
+
+	Profiler::BeginSample(L"Flush SpriteBatch");
+	sb->Flush(commandList);
+	Profiler::EndSample();
 
 	Profiler::EndSample();
 
@@ -438,6 +492,7 @@ void cdvis::DoFrame() {
 
 	// Submit VR textures
 	if (mVREnable && mHmd) {
+		Profiler::BeginSample(L"Submit VR Textures");
 		vr::VRTextureBounds_t bounds;
 		bounds.uMin = 0.0f;
 		bounds.uMax = 1.0f;
@@ -451,6 +506,7 @@ void cdvis::DoFrame() {
 		vr::D3D12TextureData_t d3d12RightEyeTexture = { mVRCamera->RightEyeTexture().Get(), commandQueue->GetCommandQueue().Get(), 0 };
 		vr::Texture_t rightEyeTexture = { (void *)&d3d12RightEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
 		vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture, &bounds, vr::Submit_Default);
+		Profiler::EndSample();
 	}
 
 	Profiler::EndSample();
@@ -470,6 +526,7 @@ void cdvis::DoFrame() {
 		Profiler::PrintLastFrame(mPerfBuffer, 1024);
 	}
 
+	// capture frame time every .05 seconds for frame time graph
 	elapsedSeconds2 += delta;
 	if (elapsedSeconds2 > 0.05) {
 		elapsedSeconds2 = 0;
@@ -477,5 +534,6 @@ void cdvis::DoFrame() {
 		mFrameTimeIndex = (mFrameTimeIndex + 1) % 128;
 	}
 
+	// Get poses as late as possible to maintain realtimeness
 	if (mHmd) vr::VRCompositor()->WaitGetPoses(mVRTrackedDevices, vr::k_unMaxTrackedDeviceCount, NULL, 0);
 }

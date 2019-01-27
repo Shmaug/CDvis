@@ -16,9 +16,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <None Include="..\Assets\Volume.hlsl" />
-    <None Include="..\Assets\device.hlsl" />
-    <None Include="..\Assets\DepthPass.hlsl" />
+    <None Include="..\Assets\Shaders\colored.hlsl" />
+    <None Include="..\Assets\Shaders\textured.hlsl" />
+    <None Include="..\Assets\Shaders\textured_bump.hlsl" />
+    <None Include="..\Assets\Shaders\volume.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cdvis.hpp">
@@ -39,6 +40,15 @@
     <ClInclude Include="VRUtil.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="VRButton.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRTools.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRDevice.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cdvis.cpp">
@@ -57,6 +67,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VRUtil.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VRButton.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VRTools.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VRDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

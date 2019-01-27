@@ -4,28 +4,37 @@
 #pragma pixel psmain
 #pragma multi_compile LIGHTING
 #pragma multi_compile PLANE
+#pragma multi_compile ISO
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
 	"DENY_DOMAIN_SHADER_ROOT_ACCESS | DENY_GEOMETRY_SHADER_ROOT_ACCESS | DENY_HULL_SHADER_ROOT_ACCESS )," \
-"RootConstants(num32bitconstants=62, b0)," \
+"RootConstants(num32bitconstants=17, b0)," \
 "DescriptorTable(SRV(t0), SRV(t1), visibility=SHADER_VISIBILITY_PIXEL)," \
+"CBV(b1)," \
 "StaticSampler(s0, filter=FILTER_MIN_MAG_MIP_LINEAR, visibility=SHADER_VISIBILITY_PIXEL, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"\
 	"addressU=TEXTURE_ADDRESS_BORDER, addressV=TEXTURE_ADDRESS_BORDER, addressW=TEXTURE_ADDRESS_BORDER)"
 
-struct DataBuffer {
-	float4x4 ObjectToWorld;
-	float4x4 WorldToObject;
-	float4x4 ViewProjection;
+struct RootData {
 	float3 CameraPosition;
-	float Density;
-	float3 LightDirection;
-	float LightDensity;
-	float4 Plane;
 	float Projection43;
+	float3 LightDirection;
 	float Projection33;
+	float3 PlanePoint;
+	float Density;
+	float3 PlaneNormal;
+	float LightDensity;
+	float Exposure;
 };
-ConstantBuffer<DataBuffer> Data : register(b0);
+struct CBData {
+	float4x4 ObjectToView;
+	float4x4 WorldToObject;
+	float4x4 ViewToObject;
+	float4x4 Projection;
+};
+
+ConstantBuffer<RootData> Root : register(b0);
+ConstantBuffer<CBData> CB : register(b1);
 Texture3D<float2> Volume : register(t0);
 Texture2D<float> DepthTexture : register(t1);
 sampler Sampler : register(s0);
@@ -40,14 +49,14 @@ struct v2f {
 v2f vsmain(float3 vertex : POSITION) {
 	v2f o;
 
-	float4 wp = mul(Data.ObjectToWorld, float4(vertex, 1));
-	o.pos = mul(Data.ViewProjection, wp);
+	float4 vp = mul(CB.ObjectToView, float4(vertex, 1));
+	o.pos = mul(CB.Projection, vp);
 
-	o.ro.xyz = mul(Data.WorldToObject, float4(Data.CameraPosition.xyz, 1)).xyz;
+	o.ro.xyz = mul(CB.WorldToObject, float4(Root.CameraPosition.xyz, 1)).xyz;
 	o.rd.xyz = vertex - o.ro.xyz;
 	o.sp.xyz = o.pos.xyw;
 
-	float3 ray = wp.xyz - Data.CameraPosition.xyz;
+	float3 ray = vp.xyz;
 	o.ro.w = ray.x;
 	o.rd.w = ray.y;
 	o.sp.w = ray.z;
@@ -72,35 +81,55 @@ float2 RayCube(float3 ro, float3 rd, float3 extents) {
 
 	return float2(tmin, tmax);
 }
-float RayPlane(float3 ro, float3 rd, float4 plane) {
-	float d = dot(plane.xyz, rd);
-	return d > 1e-3 ? (dot(plane.xyz * plane.w - ro, plane.xyz) / d) : 0;
+float RayPlane(float3 ro, float3 rd, float3 planep, float3 planen) {
+	float d = dot(planen, rd);
+	float t = dot(planep - ro, planen);
+	return d > 1e-5 ? (t / d) : (t > 0 ? 1e5 : -1e5);
+}
+
+float Density(float3 p) {
+	#ifdef PLANE
+	float d = (dot((p - .5) - Root.PlanePoint, Root.PlaneNormal) < 0) ? 0 : Volume.SampleLevel(Sampler, p, 0).r;
+	#else
+	float d = Volume.SampleLevel(Sampler, p, 0).r;
+	#endif
+
+	#ifdef ISO
+	d = (d > .2) * d;
+	#endif
+
+	return d;
 }
 
 float LinearDepth(float d) {
-	return Data.Projection43 / (d - Data.Projection33);
+	return Root.Projection43 / (d - Root.Projection33);
+}
+
+// depth texture to object-space ray depth
+float DepthTextureToObjectDepth(float3 ro, float3 viewRay, float3 screenPos) {
+	float2 uv = screenPos.xy / screenPos.z;
+	uv.y = -uv.y;
+	uv = uv * .5 + .5;
+
+	float3 vp = viewRay / viewRay.z;
+	vp *= LinearDepth(DepthTexture.Sample(Sampler, uv).r);
+
+	return length(mul(CB.ViewToObject, float4(vp, 1)).xyz - ro);
 }
 
 float4 psmain(v2f i) : SV_Target {
 	float3 ro = i.ro.xyz;
 	float3 rd = normalize(i.rd.xyz);
-	float3 wrd = normalize(float3(i.ro.w, i.rd.w, i.sp.w));
 
 	float2 intersect = RayCube(ro, rd, .5);
 	intersect.x = max(0, intersect.x);
 
 	#ifdef PLANE
-	intersect.x = max(0, RayPlane(ro, rd, Data.Plane));
+	intersect.x = max(intersect.x, RayPlane(ro, rd, Root.PlanePoint, Root.PlaneNormal));
 	#endif
 	
 	// depth buffer intersection
-	i.sp /= i.sp.z;
-	i.sp.y = -i.sp.y;
-	float2 uv = i.sp.xy * .5 + .5;
-	float3 p = Data.CameraPosition.xyz + wrd * LinearDepth(DepthTexture.Sample(Sampler, uv).r);
-	p = mul(Data.WorldToObject, float4(p, 1)).xyz;
-	float z = length(p - ro);
-
+	float z = DepthTextureToObjectDepth(ro, float3(i.ro.w, i.rd.w, i.sp.w), i.sp.xyz);
 	intersect.y = min(intersect.y, z);
 
 	clip(intersect.y - intersect.x);
@@ -111,26 +140,23 @@ float4 psmain(v2f i) : SV_Target {
 
 	float t = intersect.x;
 	float dt = .003;
+	float ldt = .03;
 	unsigned int steps = (intersect.y - intersect.x) / dt;
 	for (unsigned int i = 0; i < steps; i++) {
 		if (sum.a > .99 || t > intersect.y) break;
 
 		float3 p = ro + rd * t;
 
-		float raw = Volume.SampleLevel(Sampler, p, 0).r;
-		float den = Data.Density * raw;
-		den = (den > .2) * den;
-
-		float4 col = float4(lerp(float3(.4, .4, .5), float3(1, 1, 1), saturate(den * 3)), den);
+		float den = Density(p);
+		float4 col = float4((den * Root.Exposure).xxx, den * Root.Density);
 
 		#ifdef LIGHTING
-		float lr = (Volume.SampleLevel(Sampler, p - Data.LightDirection * dt * .5, 0).r * Data.Density - den) * Data.LightDensity;
-		col.rgb *= exp(-lr); // extinction = e^(-x)
-		//lr += den;
-		//col.rgb += lr * exp(-lr + 1); // inscatter = x*e^(-x+1)
+		// sum density from 2 samples towards the light source
+		float ld = Density(p + Root.LightDirection * ldt) + Density(p + Root.LightDirection * ldt * 2);
+		ld *= Root.LightDensity * ldt;
+		col.rgb *= exp(-ld); // extinction = e^(-x)
 		#endif
 
-		col.a *= .4;
 		col.rgb *= col.a;
 		sum += col * (1 - sum.a);
 

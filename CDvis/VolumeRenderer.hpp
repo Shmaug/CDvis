@@ -6,6 +6,7 @@
 #include <Texture.hpp>
 #include <DescriptorTable.hpp>
 #include <Shader.hpp>
+#include <ConstantBuffer.hpp>
 
 class VolumeRenderer : public Renderer {
 public:
@@ -14,9 +15,10 @@ public:
 		VolumeRenderer* mVolume;
 		Camera* mCamera;
 		DescriptorTable* mSRVTable;
+		D3D12_GPU_VIRTUAL_ADDRESS mCB;
 
-		VolumeRenderJob(unsigned int queue, VolumeRenderer* vol, Camera* camera, DescriptorTable* tbl)
-			: RenderJob(queue), mVolume(vol), mCamera(camera), mSRVTable(tbl) {}
+		VolumeRenderJob(unsigned int queue, VolumeRenderer* vol, Camera* camera, DescriptorTable* tbl, D3D12_GPU_VIRTUAL_ADDRESS cb)
+			: RenderJob(queue), mVolume(vol), mCamera(camera), mSRVTable(tbl), mCB(cb) {}
 
 		void Execute(std::shared_ptr<CommandList> commandList, std::shared_ptr<Material> materialOverride) override;
 	};
@@ -26,13 +28,20 @@ public:
 	~VolumeRenderer();
 	
 	bool mSlicePlaneEnable;
-	bool mDepthColor;
 	bool mLightingEnable;
+	bool mISOEnable;
 
 	float mDensity;
 	float mLightDensity;
+	float mExposure;
 
-	DirectX::XMFLOAT4 mSlicePlane;
+	DirectX::XMFLOAT3 mLightDir;
+
+	void SetSlicePlane(DirectX::XMFLOAT3 p, DirectX::XMFLOAT3 n);
+
+	float GetPixel(DirectX::XMUINT3 p) const;
+	float GetDensity(DirectX::XMFLOAT3 uvw, bool slicePlane = false) const;
+	float GetDensityTrilinear(DirectX::XMFLOAT3 uvw, bool slicePlane = false) const;
 
 	void SetTexture(std::shared_ptr<Texture> tex);
 
@@ -44,8 +53,12 @@ public:
 	bool mVisible;
 
 private:
+	DirectX::XMFLOAT3 mSlicePlanePoint;
+	DirectX::XMFLOAT3 mSlicePlaneNormal;
+
 	std::shared_ptr<Texture> mTexture;
 	std::unordered_map<Camera*, std::shared_ptr<DescriptorTable>*> mSRVTables;
+	std::unordered_map<Camera*, std::shared_ptr<ConstantBuffer>> mCBuffers;
 	std::shared_ptr<Mesh> mCubeMesh;
 	std::shared_ptr<Shader> mShader;
 };

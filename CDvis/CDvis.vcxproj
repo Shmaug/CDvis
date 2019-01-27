@@ -85,6 +85,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -94,6 +95,8 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>false</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64</AdditionalLibraryDirectories>
@@ -113,6 +116,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -128,6 +132,8 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>false</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -149,7 +155,10 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="cdvis.hpp" />
     <ClInclude Include="Dicom.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
+    <ClInclude Include="VRButton.hpp" />
     <ClInclude Include="VRCamera.hpp" />
+    <ClInclude Include="VRDevice.hpp" />
+    <ClInclude Include="VRTools.hpp" />
     <ClInclude Include="VRUtil.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -157,21 +166,23 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClCompile Include="cdvis.cpp" />
     <ClCompile Include="Dicom.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
+    <ClCompile Include="VRButton.cpp" />
     <ClCompile Include="VRCamera.cpp" />
+    <ClCompile Include="VRDevice.cpp" />
+    <ClCompile Include="VRTools.cpp" />
     <ClCompile Include="VRUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Assets\Volume.hlsl">
+    <None Include="..\Assets\Shaders\colored.hlsl">
       <FileType>Document</FileType>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\Assets\device.hlsl">
+    <None Include="..\Assets\Shaders\textured.hlsl">
       <FileType>Document</FileType>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\Assets\DepthPass.hlsl">
+    <None Include="..\Assets\Shaders\textured_bump.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="..\Assets\Shaders\volume.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
