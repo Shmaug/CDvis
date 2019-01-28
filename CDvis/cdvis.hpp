@@ -17,6 +17,7 @@ class VRTools;
 
 class cdvis : public IJaeGame {
 public:
+	cdvis(bool tvMode);
 	~cdvis();
 
 	void Initialize() override;
@@ -59,6 +60,7 @@ private:
 	// Jae3d textures for all device textures
 	std::unordered_map<vr::TextureID_t, std::shared_ptr<Texture>> mVRTextures;
 
+	bool m3DTV = false;
 	bool mVREnable = false;
 
 	wchar_t mPerfBuffer[1024]; // performance overlay text

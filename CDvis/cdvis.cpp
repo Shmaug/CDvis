@@ -42,13 +42,19 @@ int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdL
 		return -1;
 	}
 
-	HWND hWnd = JaeCreateWindow(L"CDvis", 1600, 900, 3);
+	bool tvMode = true;
+
+	// turn tearing off if targeting 3d tv, to allow for true fullscreen
+	HWND hWnd = JaeCreateWindow(L"CDvis", 1600, 900, 3, Graphics::CheckTearingSupport() && !tvMode);
 	Graphics::GetWindow()->SetVSync(false);
 
-	cdvis* game = new cdvis();
+	cdvis* game = new cdvis(tvMode);
 	game->Initialize();
 
 	JaeMsgLoop(game);
+
+	if (Graphics::GetWindow()->GetWindowState() == Window::WINDOW_STATE_FULLSCREEN)
+		Graphics::GetWindow()->SetWindowState(Window::WINDOW_STATE_WINDOWED);
 
 	delete game;
 
@@ -139,6 +145,7 @@ void cdvis::Initialize() {
 		mVREnable = false;
 	}
 }
+cdvis::cdvis(bool tv) : m3DTV(tv) {}
 cdvis::~cdvis() {
 	if (mHmd) vr::VR_Shutdown();
 }
@@ -255,8 +262,10 @@ void cdvis::VRCreateDevice(unsigned int index) {
 
 void cdvis::Update(double total, double delta) {
 	auto window = Graphics::GetWindow();
-	if (Input::OnKeyDown(KeyCode::Enter) && Input::KeyDown(KeyCode::AltKey))
-		window->SetFullscreen(!window->IsFullscreen());
+	if (Input::OnKeyDown(KeyCode::Enter) && Input::KeyDown(KeyCode::AltKey)) {
+		Window::WINDOW_STATE f = m3DTV ? Window::WINDOW_STATE_FULLSCREEN : Window::WINDOW_STATE_BORDERLESS;
+		window->SetWindowState(window->GetWindowState() == Window::WINDOW_STATE_WINDOWED ? f : Window::WINDOW_STATE_WINDOWED);
+	}
 	if (Input::OnKeyDown(KeyCode::F4) && Input::KeyDown(KeyCode::AltKey))
 		window->Close();
 
@@ -373,7 +382,7 @@ void cdvis::Update(double total, double delta) {
 
 void cdvis::Render(shared_ptr<Camera> cam, shared_ptr<CommandList> commandList) {
 	commandList->SetCamera(cam);
-	cam->Clear(commandList, { .2f, .2f, .2f, 0.0f });
+	cam->Clear(commandList, { .2f, .2f, .2f, 1.0f });
 	commandList->SetGlobalFloat4("Ambient", { .6f, .6f, .6f, 1.0f });
 	commandList->SetGlobalFloat3("LightColor", { 0.5f, 0.5f, 0.5f });
 	XMFLOAT3 lp;
@@ -394,6 +403,13 @@ void cdvis::DoFrame() {
 	static double elapsedSeconds2;
 
 	Profiler::FrameStart();
+
+	// Get poses as late as possible to maintain realtimeness
+	if (mHmd) {
+		Profiler::BeginSample(L"Update Tracking");
+		vr::VRCompositor()->WaitGetPoses(mVRTrackedDevices, vr::k_unMaxTrackedDeviceCount, NULL, 0);
+		Profiler::EndSample();
+	}
 
 	#pragma region update
 	Profiler::BeginSample(L"Update");
@@ -425,11 +441,38 @@ void cdvis::DoFrame() {
 		mVRCamera->ResolveEyeTextures(commandList);
 		commandList->SetCamera(mWindowCamera);
 		commandList->SetFillMode(D3D12_FILL_MODE_SOLID);
-		mWindowCamera->Clear(commandList, { .2f, .2f, .2f, 0.0f });
+		mWindowCamera->Clear(commandList, { 0, 0, 0, 0 });
+
 		float w = (float)window->GetWidth();
 		float h = (float)window->GetHeight();
-		sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(), XMFLOAT4(0, 0, w*.5f, w*1.1111f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
-		sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f, 0, w, w*1.111f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+
+		float ew = (float)mVRCamera->LeftEye()->PixelWidth();
+		float eh = (float)mVRCamera->LeftEye()->PixelHeight();
+
+		float viveAspectRatio = 1.0f / .7f;// .956521739f;
+
+		if (m3DTV && window->GetWindowState() && Window::WINDOW_STATE_FULLSCREEN) {
+			ew = w * viveAspectRatio * .25f;
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(),  XMFLOAT4(w*.5f-ew, 0,       w*.5f+ew, h * .5f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f-ew, h * .5f, w*.5f+ew, h), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+		} else {
+			if (vr::IVRExtendedDisplay *d = vr::VRExtendedDisplay()) {
+				uint32_t wx, wy, ww, wh;
+				d->GetEyeOutputViewport(vr::EVREye::Eye_Left, &wx, &wy, &ww, &wh);
+				ew = eh = (float)max(ww, wh);
+				ew *= viveAspectRatio;
+			}
+
+			// calculate size of texture
+			XMFLOAT2 t = XMFLOAT2(ew * 2.0f, eh);
+			float s = fminf(w / t.x, h / t.y);
+			t.x *= s * .5f;
+			t.y *= s;
+
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(),  XMFLOAT4(w*.5f - t.x, h*.5f - t.y, w*.5f, h*.5f + t.y), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f, h*.5f - t.y, w*.5f + t.x, h*.5f + t.y), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+		}
+
 		Profiler::EndSample();
 	} else {
 		Render(mWindowCamera, commandList);
@@ -533,7 +576,4 @@ void cdvis::DoFrame() {
 		mFrameTimes[mFrameTimeIndex] = (float)Profiler::LastFrameTime();
 		mFrameTimeIndex = (mFrameTimeIndex + 1) % 128;
 	}
-
-	// Get poses as late as possible to maintain realtimeness
-	if (mHmd) vr::VRCompositor()->WaitGetPoses(mVRTrackedDevices, vr::k_unMaxTrackedDeviceCount, NULL, 0);
 }
