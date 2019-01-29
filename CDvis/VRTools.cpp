@@ -127,7 +127,7 @@ void VRTools::ProcessInput(jvector<shared_ptr<VRDevice>>& controllers, shared_pt
 			XMStoreFloat3(&lp, lpv);
 
 			float x = volume->GetDensityTrilinear(lp, true);
-			if (volume->mISOEnable) x = (x > .2f) ? x : 0;
+			if (volume->mISOEnable) x = (x > volume->mISOValue) ? x : 0;
 			x += .5f;
 			x = x * x - .4f; // (x+.5)^2 - .4
 
