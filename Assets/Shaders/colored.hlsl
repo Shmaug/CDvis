@@ -5,12 +5,7 @@
 #pragma multi_compile NOLIGHTING
 
 #include <Core.hlsli>
-
-#pragma Parameter cbuf Material
-#pragma Parameter float4 Color         (1,1,1,1)
-#pragma Parameter float4 Ambient       (1,1,1,1)
-#pragma Parameter float4 LightPosition (0,0,0,0)
-#pragma Parameter float3 LightColor    (0,0,0)
+#include "PBR.hlsli"
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
@@ -18,17 +13,7 @@
           "DENY_GEOMETRY_SHADER_ROOT_ACCESS |" \
           "DENY_HULL_SHADER_ROOT_ACCESS )," \
 RootSigCore \
-"CBV(b2)," \
-"StaticSampler(s0, filter=FILTER_MIN_MAG_MIP_LINEAR, visibility=SHADER_VISIBILITY_PIXEL)"
-
-struct MaterialBuffer {
-	float4 Color;
-	float4 Ambient;
-	float4 LightPosition; // w is 0 if light is a directional light
-	float3 LightColor;
-};
-
-ConstantBuffer<MaterialBuffer> Material : register(b2);
+RootSigPBR
 
 struct v2f {
 	float4 pos : SV_Position;
@@ -57,23 +42,9 @@ v2f vsmain(
 }
 
 float4 psmain(v2f i) : SV_Target{
-	float4 color = Material.Color;
 	#ifndef NOLIGHTING
-	float3 lightdir;
-	float atten;
-	if (Material.LightPosition.w) {
-		// point light
-		lightdir = Material.LightPosition.xyz - i.worldPos;
-		float d = length(lightdir);
-		lightdir /= d;
-		atten = 1 / (1 + d*d);
-	} else {
-		// directional light
-		atten = 1;
-		lightdir = Material.LightPosition.xyz;
-	}
-	atten *= saturate(dot(normalize(i.worldNormal), lightdir));
-	color.rgb *= Material.LightColor.rgb * atten + Material.Ambient.rgb;
+	return float4(ShadePoint(1, 1, 1, normalize(i.worldNormal), i.worldPos, normalize(i.worldPos - Camera.Position.xyz)), Material.alpha);
+	#else
+	return float4(Material.baseColor, Material.alpha);
 	#endif
-	return color;
 }

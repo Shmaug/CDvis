@@ -9,7 +9,9 @@ using namespace std;
 using namespace DirectX;
 
 VolumeRenderer::VolumeRenderer() : VolumeRenderer(L"") {}
-VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name), mDensity(1.5f), mLightDensity(35.0f), mExposure(1.25f), mVisible(true) {
+VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name),
+	mDensity(1.5f), mLightDensity(35.0f), mExposure(1.25f), mISOValue(.2f), mLightMode(-1), mVisible(true) {
+
 	mCubeMesh = shared_ptr<Mesh>(new Mesh(L"Cube"));
 	mCubeMesh->LoadCube(.5f);
 	mCubeMesh->UploadStatic();
@@ -180,10 +182,19 @@ void VolumeRenderer::VolumeRenderJob::Execute(shared_ptr<CommandList> commandLis
 	commandList->PushState();
 	commandList->SetMaterial(nullptr);
 
-	if (mVolume->mLightingEnable)
-		commandList->EnableKeyword("LIGHTING");
-	else
-		commandList->DisableKeyword("LIGHTING");
+	if (mVolume->mLightingEnable) {
+		switch (mVolume->mLightMode) {
+		case 0:
+			commandList->EnableKeyword("LIGHT_DIRECTIONAL");
+			break;
+		case 1:
+			commandList->EnableKeyword("LIGHT_SPOT");
+			break;
+		case 2:
+			commandList->EnableKeyword("LIGHT_POINT");
+			break;
+		}
+	}
 
 	if (mVolume->mSlicePlaneEnable)
 		commandList->EnableKeyword("PLANE");
@@ -195,6 +206,7 @@ void VolumeRenderer::VolumeRenderJob::Execute(shared_ptr<CommandList> commandLis
 	else
 		commandList->DisableKeyword("ISO");
 
+	XMMATRIX w2o = XMLoadFloat4x4(&mVolume->WorldToObject());
 	XMFLOAT4X4 proj = mCamera->Projection();
 
 	float n = mCamera->Near();
@@ -203,24 +215,32 @@ void VolumeRenderer::VolumeRenderJob::Execute(shared_ptr<CommandList> commandLis
 	struct RootData {
 		XMFLOAT3 camPos;
 		float proj43;
-		XMFLOAT3 lightDir;
+		XMFLOAT3 lightPos;
 		float proj33;
 		XMFLOAT3 slicep;
 		float density;
 		XMFLOAT3 slicen;
 		float lightDensity;
+		XMFLOAT3 lightDir;
 		float exposure;
+		float lightAngle;
+		float lightAmbient;
+		float isoValue;
 	};
 	RootData data;
 	data.camPos = mCamera->WorldPosition();
 	data.proj43 = proj._43;
-	XMStoreFloat3(&data.lightDir, XMVector3Rotate(XMLoadFloat3(&mVolume->mLightDir), XMQuaternionInverse(XMLoadFloat4(&mVolume->WorldRotation()))));
+	XMStoreFloat3(&data.lightPos, XMVector3Transform(XMLoadFloat3((XMFLOAT3*)&mVolume->mLightPos), w2o));
 	data.proj33 = proj._33;
 	data.slicep = mVolume->mSlicePlanePoint;
 	data.density = mVolume->mDensity,
 	data.slicen = mVolume->mSlicePlaneNormal;
 	data.lightDensity = mVolume->mLightDensity;
+	XMStoreFloat3(&data.lightDir, XMVector3TransformNormal(XMVectorScale(XMLoadFloat3(&mVolume->mLightDir), mVolume->mLightRange), w2o));
 	data.exposure = mVolume->mExposure;
+	data.lightAngle = mVolume->mLightAngle;
+	data.lightAmbient = mVolume->mLightAmbient;
+	data.isoValue = mVolume->mISOValue;
 
 	commandList->SetShader(mVolume->mShader);
 	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, (UINT)sizeof(RootData) / 4, &data, 0);

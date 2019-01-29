@@ -20,6 +20,7 @@
     <None Include="..\Assets\Shaders\textured.hlsl" />
     <None Include="..\Assets\Shaders\textured_bump.hlsl" />
     <None Include="..\Assets\Shaders\volume.hlsl" />
+    <None Include="..\Assets\Shaders\PBR.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cdvis.hpp">
@@ -40,13 +41,13 @@
     <ClInclude Include="VRUtil.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VRButton.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="VRTools.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VRDevice.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRInteractable.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -67,9 +68,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VRUtil.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VRButton.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VRTools.cpp">

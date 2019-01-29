@@ -12,6 +12,7 @@ public:
 
 	void CreateCameras(unsigned int resx, unsigned int resy);
 	void UpdateCameras(vr::IVRSystem* hmd);
+	void UpdateCameras(float fov, float separation);
 
 	std::shared_ptr<Camera> LeftEye() const { return mLeftEye; }
 	std::shared_ptr<Camera> RightEye() const { return mRightEye; }

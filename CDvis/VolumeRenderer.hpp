@@ -7,8 +7,9 @@
 #include <DescriptorTable.hpp>
 #include <Shader.hpp>
 #include <ConstantBuffer.hpp>
+#include "VRInteractable.hpp"
 
-class VolumeRenderer : public Renderer {
+class VolumeRenderer : public Renderer, public VRInteractable {
 public:
 	class VolumeRenderJob : public RenderJob {
 	public:
@@ -28,14 +29,20 @@ public:
 	~VolumeRenderer();
 	
 	bool mSlicePlaneEnable;
-	bool mLightingEnable;
 	bool mISOEnable;
+	bool mLightingEnable;
 
 	float mDensity;
 	float mLightDensity;
 	float mExposure;
+	float mISOValue;
 
+	DirectX::XMFLOAT3 mLightPos;
 	DirectX::XMFLOAT3 mLightDir;
+	int mLightMode;
+	float mLightAngle;
+	float mLightRange;
+	float mLightAmbient;
 
 	void SetSlicePlane(DirectX::XMFLOAT3 p, DirectX::XMFLOAT3 n);
 
@@ -47,6 +54,7 @@ public:
 
 	void GatherRenderJobs(std::shared_ptr<CommandList> commandList, std::shared_ptr<Camera> camera, jvector<RenderJob*> &list) override;
 	bool Visible() override { return mVisible; }
+	bool Draggable() override { return true; }
 
 	DirectX::BoundingOrientedBox Bounds() override;
 

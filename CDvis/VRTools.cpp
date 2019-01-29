@@ -8,7 +8,7 @@
 #include <Material.hpp>
 
 #include "VRDevice.hpp"
-#include "VRButton.hpp"
+#include "VRInteractable.hpp"
 #include "VolumeRenderer.hpp"
 
 #define F2D(x) (int)x, (int)((x - floor(x)) * 10.0f)
@@ -41,13 +41,17 @@ void VRTools::InitTools() {
 	
 	auto penMat = shared_ptr<Material>(new Material(L"Pen", textured));
 	penMat->SetTexture("Texture", penTex, -1);
+	penMat->SetFloat("Metallic", 0.f, -1);
+	penMat->SetFloat("Smoothness", .5f, -1);
+
 	auto lightBodyMat = shared_ptr<Material>(new Material(L"Light Body", colored));
-	lightBodyMat->SetFloat4("Color", { .2f, .2f, .2f, 1 }, -1);
+	lightBodyMat->SetFloat4("Color", { .1f, .1f, .1f, 1 }, -1);
+	lightBodyMat->SetFloat("Smoothness", .2f, -1);
 	auto lightMat = shared_ptr<Material>(new Material(L"Light", colored));
 	lightMat->SetFloat4("Color", { 1, 1, 1, 1 }, -1);
 	lightMat->EnableKeyword("NOLIGHTING");
 
-	mLight = GetScene()->AddObject<MeshRenderer>(L"Light");
+	mLight = GetScene()->AddObject<VRDraggableMeshRenderer>(L"Light");
 	mLight->LocalPosition(0, 1, 0);
 	mLight->SetMesh(lightMesh);
 	mLight->SetMaterial(lightBodyMat, 0);
@@ -70,18 +74,41 @@ void VRTools::InitTools() {
 }
 
 void VRTools::ProcessInput(jvector<shared_ptr<VRDevice>>& controllers, shared_ptr<VolumeRenderer> volume) {
-	XMVECTOR vp = XMLoadFloat3(&volume->LocalPosition());
-	XMVECTOR vr = XMLoadFloat4(&volume->LocalRotation());
-
-	static XMFLOAT3 corners[DirectX::BoundingOrientedBox::CORNER_COUNT];
-	volume->Bounds().GetCorners(corners);
-
-	static jvector<unsigned int> cornerControllers; // controllers hovering over a corner
-	cornerControllers.clear();
-	bool showCorners = false;
+	static jvector<shared_ptr<Object>> boundsIntersect;
 
 	for (unsigned int i = 0; i < controllers.size(); i++) {
 		auto controller = controllers[i];
+
+		// dragging objects
+			boundsIntersect.clear();
+			GetScene()->IntersectPoint(controller->LocalPosition(), boundsIntersect);
+			for (unsigned int j = 0; j < boundsIntersect.size(); j++) {
+				auto g = std::dynamic_pointer_cast<VRInteractable>(boundsIntersect[j]);
+				if (!g) continue;
+
+			if (g->Draggable() && controller->ButtonPressedFirst(vr::EVRButtonId::k_EButton_Grip)) {
+				DragOperation* d = nullptr;
+				for (unsigned int k = 0; k < mDragging.size(); k++) {
+					if (mDragging[k].mObject == boundsIntersect[j]) {
+						d = &mDragging[k];
+						break;
+					}
+				}
+				if (!d) {
+					d = &mDragging.push_back({});
+
+					XMVECTOR op = XMLoadFloat3(&boundsIntersect[j]->WorldPosition());
+					XMVECTOR or = XMLoadFloat4(&boundsIntersect[j]->WorldRotation());
+
+					d->mController = controller;
+					d->mObject = boundsIntersect[j];
+					XMStoreFloat3(&(d->mDragPos), XMVector3Transform(op, XMLoadFloat4x4(&controller->WorldToObject())));
+					XMStoreFloat4(&(d->mDragRotation), XMQuaternionMultiply(or, XMQuaternionInverse(XMLoadFloat4(&controller->DeviceRotation())) ));
+					
+					g->DragStart(controller);
+				}
+			}
+		}
 
 		// cutting plane
 		if (controller->ButtonPressed(vr::EVRButtonId::k_EButton_Axis0)) {
@@ -91,28 +118,6 @@ void VRTools::ProcessInput(jvector<shared_ptr<VRDevice>>& controllers, shared_pt
 			volume->SetSlicePlane(controller->DevicePosition(), n);
 		}
 
-		// corner arrows
-		XMVECTOR cp = XMLoadFloat3(&controller->LocalPosition());
-		unsigned int ci = 0;
-		float cd = XMVectorGetX(XMVector3LengthSq(XMVectorSubtract(XMLoadFloat3(&corners[0]), cp)));
-		for (unsigned int j = 1; j < DirectX::BoundingOrientedBox::CORNER_COUNT; j++) {
-			float d = XMVectorGetX(XMVector3LengthSq(XMVectorSubtract(XMLoadFloat3(&corners[j]), cp)));
-			if (d < cd) {
-				cd = d;
-				ci = j;
-			}
-		}
-		if (cd < .002) showCorners = true;
-
-		// dragging
-		if (controller->ButtonPressedFirst(vr::EVRButtonId::k_EButton_Grip)) {
-			if (volume->Bounds().Contains(cp)) {
-				mDragging = controller;
-				// dragPos = (volPos - controllerPos) * controllerRotation^-1
-				XMStoreFloat3(&mDragPos, XMVector3Rotate(XMVectorSubtract(vp, XMLoadFloat3(&controller->DevicePosition())), XMQuaternionInverse(XMLoadFloat4(&controller->LocalRotation()))));
-				XMStoreFloat4(&mDragRotation, XMQuaternionMultiply(vr, XMQuaternionInverse(XMLoadFloat4(&controller->DeviceRotation()))));
-			}
-		}
 
 		// haptics
 		if (controller->ButtonPressed(vr::EVRButtonId::k_EButton_SteamVR_Trigger)) {
@@ -122,6 +127,7 @@ void VRTools::ProcessInput(jvector<shared_ptr<VRDevice>>& controllers, shared_pt
 			XMStoreFloat3(&lp, lpv);
 
 			float x = volume->GetDensityTrilinear(lp, true);
+			if (volume->mISOEnable) x = (x > .2f) ? x : 0;
 			x += .5f;
 			x = x * x - .4f; // (x+.5)^2 - .4
 
@@ -140,22 +146,16 @@ void VRTools::ProcessInput(jvector<shared_ptr<VRDevice>>& controllers, shared_pt
 		}
 	}
 
-	if (mDragging) {
-		if (mDragging->ButtonPressed(vr::EVRButtonId::k_EButton_Grip)) {
-			volume->LocalPosition(XMVector3Transform(XMLoadFloat3(&mDragPos), XMLoadFloat4x4(&mDragging->ObjectToWorld())));
-			volume->LocalRotation(XMQuaternionMultiply(XMLoadFloat4(&mDragRotation), XMLoadFloat4(&mDragging->LocalRotation())));
-		} else
-			mDragging = nullptr;
-	}
-
-	for (unsigned int i = 0; i < DirectX::BoundingOrientedBox::CORNER_COUNT; i++) {
-		mRotateArrows[i]->mVisible = showCorners;
-		mRotateArrows[i]->LocalPosition(corners[i]);
-		mRotateArrows[i]->LocalRotation(vr);
-	}
-
-	if (cornerControllers.size() == 1) {
-		// Rotate volume from corner
+	for (unsigned int i = 0; i < mDragging.size(); i++) {
+		if (mDragging[i].mController->ButtonPressed(vr::EVRButtonId::k_EButton_Grip)) {
+			auto o = mDragging[i].mObject.get();
+			o->LocalPosition(XMVector3Transform(XMLoadFloat3(&mDragging[i].mDragPos), XMLoadFloat4x4(&mDragging[i].mController->ObjectToWorld())));
+			o->LocalRotation(XMQuaternionMultiply(XMLoadFloat4(&mDragging[i].mDragRotation), XMLoadFloat4(&mDragging[i].mController->DeviceRotation())));
+		} else {
+			std::dynamic_pointer_cast<VRInteractable>(mDragging[i].mObject)->DragStop(mDragging[i].mController);
+			mDragging.remove(i);
+			i--;
+		}
 	}
 }
 

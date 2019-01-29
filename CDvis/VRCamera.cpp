@@ -92,6 +92,12 @@ void VRCamera::UpdateCameras(vr::IVRSystem* hmd) {
 	b *= -mRightEye->Near();
 	mRightEye->PerspectiveBounds(XMFLOAT4(l, r, b, t));
 }
+void VRCamera::UpdateCameras(float fov, float separation) {
+	mLeftEye->LocalPosition(-separation * .5f, 0, 0);
+	mRightEye->LocalPosition(separation * .5f, 0, 0);
+	mLeftEye->FieldOfView(fov);
+	mRightEye->FieldOfView(fov);
+}
 
 bool VRCamera::UpdateTransform() {
 	if (!Object::UpdateTransform()) return false;

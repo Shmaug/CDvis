@@ -2,14 +2,14 @@
 #pragma rootsig RootSig
 #pragma vertex vsmain
 #pragma pixel psmain
-#pragma multi_compile LIGHTING
+#pragma multi_compile LIGHT_DIRECTIONAL LIGHT_SPOT LIGHT_POINT
 #pragma multi_compile PLANE
 #pragma multi_compile ISO
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
 	"DENY_DOMAIN_SHADER_ROOT_ACCESS | DENY_GEOMETRY_SHADER_ROOT_ACCESS | DENY_HULL_SHADER_ROOT_ACCESS )," \
-"RootConstants(num32bitconstants=17, b0)," \
+"RootConstants(num32bitconstants=23, b0)," \
 "DescriptorTable(SRV(t0), SRV(t1), visibility=SHADER_VISIBILITY_PIXEL)," \
 "CBV(b1)," \
 "StaticSampler(s0, filter=FILTER_MIN_MAG_MIP_LINEAR, visibility=SHADER_VISIBILITY_PIXEL, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"\
@@ -18,13 +18,17 @@
 struct RootData {
 	float3 CameraPosition;
 	float Projection43;
-	float3 LightDirection;
+	float3 LightPosition;
 	float Projection33;
 	float3 PlanePoint;
 	float Density;
 	float3 PlaneNormal;
 	float LightDensity;
+	float3 LightDirection;
 	float Exposure;
+	float LightAngle;
+	float LightAmbient;
+	float ISOValue;
 };
 struct CBData {
 	float4x4 ObjectToView;
@@ -95,7 +99,7 @@ float Density(float3 p) {
 	#endif
 
 	#ifdef ISO
-	d = (d > .2) * d;
+	d = (d > Root.ISOValue) * d;
 	#endif
 
 	return d;
@@ -117,6 +121,14 @@ float DepthTextureToObjectDepth(float3 ro, float3 viewRay, float3 screenPos) {
 	return length(mul(CB.ViewToObject, float4(vp, 1)).xyz - ro);
 }
 
+float LightDistanceAttenuation(float x, float r) {
+	x += 1;
+	return 1 / (x * x);
+}
+float LightAngleAttenuation(float ldp, float r) {
+	return saturate(10 * (max(0, ldp) - r));
+}
+
 float4 psmain(v2f i) : SV_Target {
 	float3 ro = i.ro.xyz;
 	float3 rd = normalize(i.rd.xyz);
@@ -136,6 +148,10 @@ float4 psmain(v2f i) : SV_Target {
 
 	ro += .5; // cube has a radius of .5, transform to UVW space
 
+	float3 lightDir = normalize(Root.LightDirection);
+	float lightRange = length(lightDir);
+	lightDir /= lightRange;
+
 	float4 sum = 0;
 
 	float t = intersect.x;
@@ -149,12 +165,28 @@ float4 psmain(v2f i) : SV_Target {
 
 		float den = Density(p);
 		float4 col = float4((den * Root.Exposure).xxx, den * Root.Density);
-
-		#ifdef LIGHTING
+		
+		#if defined(LIGHT_DIRECTIONAL)
 		// sum density from 2 samples towards the light source
-		float ld = Density(p + Root.LightDirection * ldt) + Density(p + Root.LightDirection * ldt * 2);
+		float ld = Density(p - lightDir * ldt) + Density(p - lightDir * ldt * 2);
 		ld *= Root.LightDensity * ldt;
-		col.rgb *= exp(-ld); // extinction = e^(-x)
+		col.rgb *= exp(-ld) + Root.LightAmbient; // extinction = e^(-x)
+
+		#elif defined(LIGHT_SPOT) || defined(LIGHT_POINT)
+
+		float3 ldir = Root.LightPosition - (p-.5);
+		float dist = length(ldir);
+		ldir /= dist;
+
+		// sum density from 2 samples towards the light source
+		float ld = Density(p + ldir * ldt) + Density(p + ldir * ldt * 2);
+		ld *= Root.LightDensity * ldt;
+		col.rgb *= exp(-ld) // extinction = e^(-x)
+			* LightDistanceAttenuation(dist, lightRange * 1000.0f)
+		#ifdef LIGHT_SPOT
+			* LightAngleAttenuation(dot(lightDir, -ldir), Root.LightAngle)
+		#endif
+			+ Root.LightAmbient;
 		#endif
 
 		col.rgb *= col.a;

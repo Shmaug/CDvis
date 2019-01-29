@@ -148,6 +148,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <None Include="..\Assets\Shaders\PBR.hlsli" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -155,9 +156,9 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="cdvis.hpp" />
     <ClInclude Include="Dicom.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
-    <ClInclude Include="VRButton.hpp" />
     <ClInclude Include="VRCamera.hpp" />
     <ClInclude Include="VRDevice.hpp" />
+    <ClInclude Include="VRInteractable.hpp" />
     <ClInclude Include="VRTools.hpp" />
     <ClInclude Include="VRUtil.hpp" />
   </ItemGroup>
@@ -166,7 +167,6 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClCompile Include="cdvis.cpp" />
     <ClCompile Include="Dicom.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
-    <ClCompile Include="VRButton.cpp" />
     <ClCompile Include="VRCamera.cpp" />
     <ClCompile Include="VRDevice.cpp" />
     <ClCompile Include="VRTools.cpp" />
