@@ -10,10 +10,12 @@
 #include <Font.hpp>
 #include <Texture.hpp>
 
+#include "VRInteractable.hpp"
+
 class VolumeRenderer;
 class VRCamera;
 class VRDevice;
-class VRTools;
+class VRInteraction;
 
 class cdvis : public IJaeGame {
 public:
@@ -30,13 +32,27 @@ public:
 	void VRGetRenderModel(unsigned int index, MeshRenderer* renderer);
 
 	void Update(double totalTime, double deltaTime);
-	void Render(std::shared_ptr<Camera> camera, std::shared_ptr<CommandList> commandList);
+	void PreRender(const std::shared_ptr<CommandList>& commandList);
+	void Render(const std::shared_ptr<Camera>& camera, const std::shared_ptr<CommandList>& commandList);
 
 	void BrowseImage();
 	void BrowseVolume();
 
 private:
 	double mfps;
+
+	class VRLight : public MeshRenderer, public VRInteractable {
+	public:
+		VRLight() : MeshRenderer(), mActivated(false) {};
+		VRLight(jwstring name) : MeshRenderer(name), mActivated(false) {};
+
+		bool mActivated;
+
+		bool Draggable() override { return true; }
+		void ActivatePress(const std::shared_ptr<VRDevice>& controller) override {
+			mActivated = !mActivated;
+		}
+	};
 
 	std::shared_ptr<Font> mArial;
 
@@ -46,7 +62,8 @@ private:
 	std::shared_ptr<MeshRenderer> mFloor;
 
 	std::shared_ptr<VolumeRenderer> mVolume;
-	std::shared_ptr<VRTools> mVRTools;
+	std::shared_ptr<VRInteraction> mVRInteraction;
+	std::shared_ptr<VRLight> mLight;
 
 	// OpenVR
 	vr::IVRSystem* mHmd;
@@ -62,10 +79,7 @@ private:
 
 	bool mVREnable = false;
 	bool m3DTVEnable = false;
-	bool mTVCameraEnable = false;
-	std::shared_ptr<VRCamera> mTVCamera;
 	float mTVEyeSeparation = 0.f;
-	float mTVCameraSeparation = .1f;
 
 	wchar_t mPerfBuffer[1024]; // performance overlay text
 	float mFrameTimes[128];

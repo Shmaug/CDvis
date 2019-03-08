@@ -10,6 +10,7 @@
 #pragma Parameter srv Texture
 #pragma Parameter cbuf TexBuffer
 #pragma Parameter float4 TextureST     (1,1,0,0)
+#pragma Parameter float AlphaCutoff    .25
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
@@ -24,6 +25,7 @@ RootSigPBR \
 
 struct TexBuffer {
 	float4 TextureST;
+	float AlphaCutoff;
 };
 
 Texture2D<float4> Texture : register(t0);
@@ -65,8 +67,10 @@ v2f vsmain(float3 vertex : POSITION, float2 uv : TEXCOORD0
 float4 psmain(v2f i) : SV_Target{
 	#ifndef NOLIGHTING
 	float4 t = Texture.Sample(Sampler, float2(i.pack0.w, i.pack1.w));
-	return float4(ShadePoint(t.rgb, 1, 1, normalize(i.pack0.xyz), i.pack1.xyz, normalize(i.pack1.xyz - Camera.Position.xyz)), t.a * Material.alpha);
+	float4 c = float4(ShadePoint(t.rgb, 1, 1, normalize(i.pack0.xyz), i.pack1.xyz, normalize(i.pack1.xyz - Camera.Position.xyz)), t.a * Material.alpha);
 	#else
-	return Texture.Sample(Sampler, i.uv) * float4(Material.baseColor, Material.alpha);
+	float4 c = Texture.Sample(Sampler, i.uv) * float4(Material.baseColor, Material.alpha);
 	#endif
+	clip(c.a - Tex.AlphaCutoff);
+	return c;
 }

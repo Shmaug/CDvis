@@ -17,12 +17,12 @@
 #include <SpriteBatch.hpp>
 #include <Font.hpp>
 
-#include "Dicom.hpp"
+#include "ImageLoader.hpp"
 #include "VolumeRenderer.hpp"
 #include "VRUtil.hpp"
 #include "VRCamera.hpp"
 #include "VRDevice.hpp"
-#include "VRTools.hpp"
+#include "VRInteraction.hpp"
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "runtimeobject.lib")
@@ -87,11 +87,12 @@ bool cdvis::InitializeVR() {
 	mVRCamera->CreateCameras(w, h);
 	mVRCamera->UpdateCameras(mHmd);
 
-	mTVCamera->Parent(mVRCamera);
-
 	mVRDevices.reserve(vr::k_unMaxTrackedDeviceCount);
 	for (unsigned int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++)
 		mVRDevices.push_back(nullptr);
+
+	mVRInteraction = shared_ptr<VRInteraction>(new VRInteraction());
+	mVRInteraction->InitTools(mScene);
 
 	mVREnable = true;
 
@@ -115,26 +116,39 @@ void cdvis::Initialize() {
 	XMFLOAT3 vp = mVolume->LocalPosition();
 	mWindowCamera->LocalPosition(vp.x, vp.y, vp.z + mCameraZ);
 
+	#pragma region scene objects
+	auto colored = AssetDatabase::GetAsset<Shader>(L"colored");
+
 	auto roomMesh = AssetDatabase::GetAsset<Mesh>(L"Room");
 	roomMesh->UploadStatic();
+	auto lightMesh = AssetDatabase::GetAsset<Mesh>(L"light");
+	lightMesh->UploadStatic();
+
 	auto roomMat = shared_ptr<Material>(new Material(L"Room", AssetDatabase::GetAsset<Shader>(L"colored")));
-	roomMat->SetFloat3("Color", { .25f, .25f, .25f }, -1);
+	roomMat->SetFloat3("Color", { .5f, .5f, .5f }, -1);
 	roomMat->SetFloat("Metallic", 1.f, -1);
-	roomMat->SetFloat("Smoothness", .9f, -1);
+	roomMat->SetFloat("Smoothness", .3f, -1);
+
+	auto lightBodyMat = shared_ptr<Material>(new Material(L"Light Body", colored));
+	lightBodyMat->SetFloat4("Color", { .1f, .1f, .1f, 1 }, -1);
+	lightBodyMat->SetFloat("Smoothness", .2f, -1);
+	auto lightMat = shared_ptr<Material>(new Material(L"Light", colored));
+	lightMat->SetFloat("Smoothness", 0.9f, -1);
+	lightMat->SetFloat4("Color", { .2f, .2f, .2f, 1 }, -1);
 
 	auto room = mScene->AddObject<MeshRenderer>(L"Room");
 	room->LocalScale(1.2f, 1.2f, 1.2f);
 	room->SetMesh(roomMesh);
 	room->SetMaterial(roomMat, 0);
 
-	mVRTools = mScene->AddObject<VRTools>(L"VR Tool Menu");
-	mVRTools->InitTools();
-	mVRTools->mLight->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PIDIV4, XM_PIDIV4, 0));
-	mVRTools->mLight->LocalPosition(XMVector3Rotate(XMVectorSet(0, 0, -2, 0), XMLoadFloat4(&mVRTools->mLight->LocalRotation())));
-
-	mTVCamera = mScene->AddObject<VRCamera>(L"TV Camera");
-	mTVCamera->CreateCameras(960, 540);
-	mTVCamera->UpdateCameras(XMConvertToRadians(70.f), mTVCameraSeparation);
+	mLight = mScene->AddObject<VRLight>(L"Light");
+	mLight->LocalPosition(0, 1, 0);
+	mLight->SetMesh(lightMesh);
+	mLight->SetMaterial(lightBodyMat, 0);
+	mLight->SetMaterial(lightMat, 1);
+	mLight->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PIDIV4, XM_PIDIV4, 0));
+	mLight->LocalPosition(XMVectorAdd(XMVectorSet(0, 1, 0, 0), XMVector3Rotate(XMVectorSet(0, 0, -.4f, 0), XMLoadFloat4(&mLight->LocalRotation()))));
+	#pragma endregion
 
 	if (!InitializeVR()) {
 		OutputDebugString(L"Failed to initialize VR\n");
@@ -160,7 +174,7 @@ void cdvis::BrowseImage() {
 	if (file.empty()) return;
 
 	XMFLOAT3 size;
-	mVolume->SetTexture(Dicom::LoadImage(file, size));
+	mVolume->SetTexture(ImageLoader::LoadImage(file, size));
 	mVolume->LocalScale(size);
 }
 void cdvis::BrowseVolume() {
@@ -168,7 +182,7 @@ void cdvis::BrowseVolume() {
 	if (folder.empty()) return;
 
 	XMFLOAT3 size;
-	mVolume->SetTexture(Dicom::LoadVolume(folder, size));
+	mVolume->SetTexture(ImageLoader::LoadVolume(folder, size));
 	mVolume->LocalScale(size);
 }
 
@@ -267,7 +281,6 @@ void cdvis::Update(double total, double delta) {
 
 	if (Input::OnKeyDown(KeyCode::Enter) && Input::KeyDown(KeyCode::AltKey))
 		window->SetWindowState(window->GetWindowState() == Window::WINDOW_STATE_WINDOWED ? Window::WINDOW_STATE_BORDERLESS : Window::WINDOW_STATE_WINDOWED);
-	
 	if (Input::OnKeyDown(KeyCode::F4) && Input::KeyDown(KeyCode::AltKey))
 		window->Close();
 
@@ -275,20 +288,6 @@ void cdvis::Update(double total, double delta) {
 		mPerfOverlay = !mPerfOverlay;
 	if (Input::OnKeyDown(KeyCode::F2))
 		mDebugDraw = !mDebugDraw;
-	if (Input::OnKeyDown(KeyCode::F3))
-		mWireframe = !mWireframe;
-
-	if (Input::OnKeyDown(KeyCode::G))
-		mVolume->mLightingEnable = !mVolume->mLightingEnable;
-	if (Input::OnKeyDown(KeyCode::H))
-		mVolume->mISOEnable = !mVolume->mISOEnable;
-
-	if (Input::OnKeyDown(KeyCode::V))
-		mVREnable = !mVREnable;
-	if (Input::OnKeyDown(KeyCode::T))
-		m3DTVEnable = !m3DTVEnable;
-	if (Input::OnKeyDown(KeyCode::Y))
-		mTVCameraEnable = !mTVCameraEnable;
 	
 	#pragma region VR Controls
 	static jvector<shared_ptr<VRDevice>> trackedControllers;
@@ -305,14 +304,14 @@ void cdvis::Update(double total, double delta) {
 		for (vr::TrackedDeviceIndex_t i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
 			if (!mVRTrackedDevices[i].bPoseIsValid) {
 				// don't draw or update if the device's pose isn't valid
-				if (mVRDevices[i]) mVRDevices[i]->mVisible = false;
+				if (mVRDevices[i]) mVRDevices[i]->mTracking = false;
 				continue;
 			}
 
 			if (!mVRDevices[i]) VRCreateDevice(i);
 
 			// don't draw devices if SteamVR is drawing them already (in SteamVR menu, etc)
-			mVRDevices[i]->mVisible = drawControllers;
+			mVRDevices[i]->mTracking = drawControllers;
 			mVRDevices[i]->UpdateDevice(mHmd, mVRTrackedDevices[i]);
 
 			// Process device input
@@ -332,11 +331,22 @@ void cdvis::Update(double total, double delta) {
 			}
 		}
 
-		mVRTools->ProcessInput(trackedControllers, mVolume);
+		mVRInteraction->ProcessInput(mScene, trackedControllers, mVolume, delta);
 	}
 	#pragma endregion
 
 	#pragma region PC controls
+
+	if (Input::OnKeyDown(KeyCode::G))
+		mLight->mActivated = !mLight->mActivated;
+	if (Input::OnKeyDown(KeyCode::H))
+		mVolume->mISOEnable = !mVolume->mISOEnable;
+
+	if (Input::OnKeyDown(KeyCode::V))
+		mVREnable = !mVREnable;
+	if (Input::OnKeyDown(KeyCode::T))
+		m3DTVEnable = !m3DTVEnable;
+
 	if (Input::MouseWheelDelta() != 0) {
 		mCameraZ += Input::MouseWheelDelta() * .1f;
 		XMFLOAT3 vp = mVolume->LocalPosition();
@@ -384,31 +394,54 @@ void cdvis::Update(double total, double delta) {
 	if (Input::KeyDown(KeyCode::C))
 		mVolume->mExposure += 1.5f * (float)delta;
 
+	if (Input::OnKeyDown(KeyCode::A))
+		mVolume->mMaskMode = (VolumeRenderer::MASK_MODE)((mVolume->mMaskMode + 1) % 3);
+
 	if (Input::KeyDown(KeyCode::N))
 		mVolume->mISOValue -= .2f * (float)delta;
 	if (Input::KeyDown(KeyCode::M))
 		mVolume->mISOValue += .2f * (float)delta;
 	mVolume->mISOValue = fmaxf(fminf(mVolume->mISOValue, 1.f), 0.f);
 
-	if (mTVCameraEnable) {
-		if (Input::KeyDown(KeyCode::Left))
-			mTVCameraSeparation -= .5f * (float)delta;
-		else if (Input::KeyDown(KeyCode::Right))
-			mTVCameraSeparation += .5f * (float)delta;
-		mTVCamera->UpdateCameras(XMConvertToRadians(70.f), mTVCameraSeparation);
-	} else {
-		if (Input::KeyDown(KeyCode::Left))
-			mTVEyeSeparation -= 10.f * (float)delta;
-		else if (Input::KeyDown(KeyCode::Right))
-			mTVEyeSeparation += 10.f * (float)delta;
-	}
+	if (Input::KeyDown(KeyCode::Left))
+		mTVEyeSeparation -= 10.f * (float)delta;
+	else if (Input::KeyDown(KeyCode::Right))
+		mTVEyeSeparation += 10.f * (float)delta;
 	#pragma endregion
 }
 
-void cdvis::Render(shared_ptr<Camera> cam, shared_ptr<CommandList> commandList) {
+void cdvis::PreRender(const shared_ptr<CommandList>& commandList) {
+	XMFLOAT4 c { 8.f, 8.f, 8.f, 1.0f };
+	XMFLOAT4 p;
+	XMFLOAT4 d;
+	*((XMFLOAT3*)&p) = mLight->WorldPosition();
+	c.w = 1.f; // spot light
+	p.w = 10.f;
+	XMStoreFloat3((XMFLOAT3*)&d, XMVector3Rotate(XMVectorSet(0, 0, 1, 0), XMLoadFloat4(&mLight->WorldRotation())));
+	d.w = cosf(XMConvertToRadians(60.f));
+	if (!mLight->mActivated) c.x = c.y = c.z = 0.f;
+
+	commandList->SetGlobalFloat3("LightAmbientSpec", { .5f, .5f, .5f });
+	commandList->SetGlobalFloat3("LightAmbientDiff", { .5f, .5f, .5f });
+	commandList->SetGlobalFloat4("LightColor", c);
+	commandList->SetGlobalFloat4("LightPosition", p);
+	commandList->SetGlobalFloat4("LightDirection", d);
+	mVolume->mLightPos = *((XMFLOAT3*)&p);
+	mVolume->mLightDir = *((XMFLOAT3*)&d);
+	mVolume->mLightMode = 1;
+	mVolume->mLightAngle = d.w;
+	mVolume->mLightRange = p.w;
+	mVolume->mLightAmbient = .3f;
+	mVolume->mLightingEnable = mLight->mActivated;
+
+	mLight->GetMaterial(1)->SetFloat3("Emission", mLight->mActivated ? XMFLOAT3(1.f, 1.f, 1.f) : XMFLOAT3(0.f, 0.f, 0.f), commandList->GetFrameIndex());
+}
+
+void cdvis::Render(const shared_ptr<Camera>& cam, const shared_ptr<CommandList>& commandList) {
 	commandList->SetCamera(cam);
 	cam->Clear(commandList, { .2f, .2f, .2f, 1.0f });
 	mScene->Draw(commandList, cam);
+	Graphics::GetSpriteBatch()->Flush(commandList);
 	if (mDebugDraw) mScene->DebugDraw(commandList, cam);
 }
 
@@ -448,40 +481,13 @@ void cdvis::DoFrame() {
 	window->PrepareRender(commandList);
 
 	shared_ptr<SpriteBatch> sb = Graphics::GetSpriteBatch();
+	sb->Reset(commandList);
 
-	XMFLOAT4 c { 8.f, 8.f, 8.f, 1.0f };
-	XMFLOAT4 p;
-	XMFLOAT4 d;
-	*((XMFLOAT3*)&p) = mVRTools->mLight->WorldPosition();
-	c.w = 1.f; // spot light
-	p.w = 10.f;
-	d.w = cosf(XMConvertToRadians(60.f));
-	XMStoreFloat3((XMFLOAT3*)&d, XMVector3Rotate(XMVectorSet(0, 0, 1, 0), XMLoadFloat4(&mVRTools->mLight->WorldRotation())));
+	PreRender(commandList);
 
-	commandList->SetGlobalFloat3("LightAmbientSpec", { .5f, .5f, .5f });
-	commandList->SetGlobalFloat3("LightAmbientDiff", { .5f, .5f, .5f });
-	commandList->SetGlobalFloat4("LightColor", c);
-	commandList->SetGlobalFloat4("LightPosition", p);
-	commandList->SetGlobalFloat4("LightDirection", d);
-	mVolume->mLightPos = *((XMFLOAT3*)&p);
-	mVolume->mLightDir = *((XMFLOAT3*)&d);
-	mVolume->mLightMode = 1;
-	mVolume->mLightAngle = d.w;
-	mVolume->mLightRange = p.w;
-	mVolume->mLightAmbient = .3f;
-
-	if (mWireframe) commandList->SetFillMode(D3D12_FILL_MODE_WIREFRAME);
 	if (mHmd && mVREnable) {
 		Render(mVRCamera->LeftEye(), commandList);
 		Render(mVRCamera->RightEye(), commandList);
-
-		if (m3DTVEnable && mTVCameraEnable) {
-			Profiler::BeginSample(L"Render TV Cameras");
-			Render(mTVCamera->LeftEye(), commandList);
-			Render(mTVCamera->RightEye(), commandList);
-			mTVCamera->ResolveEyeTextures(commandList);
-			Profiler::EndSample();
-		}
 
 		// draw eye textures to window
 		Profiler::BeginSample(L"Draw Eyes");
@@ -499,14 +505,9 @@ void cdvis::DoFrame() {
 		float viveAspectRatio = 1.0f / .7f;// .956521739f;
 
 		if (m3DTVEnable) {
-			if (mTVCameraEnable) {
-				sb->DrawTexture(mTVCamera->SRVHeap(), mTVCamera->RightEyeSRV(), XMFLOAT4(0, 0, w, h * .5f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
-				sb->DrawTexture(mTVCamera->SRVHeap(), mTVCamera->LeftEyeSRV(), XMFLOAT4(0, h * .5f, w, h), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
-			} else {
-				ew = w * viveAspectRatio * .25f;
-				sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f - ew - mTVEyeSeparation, 0, w*.5f + ew - mTVEyeSeparation, h * .5f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
-				sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(), XMFLOAT4(w*.5f - ew + mTVEyeSeparation, h * .5f, w*.5f + ew + mTVEyeSeparation, h), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
-			}
+			ew = w * viveAspectRatio * .25f;
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->LeftEyeSRV(), XMFLOAT4(w*.5f - ew - mTVEyeSeparation, 0, w*.5f + ew - mTVEyeSeparation, h * .5f), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
+			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f - ew + mTVEyeSeparation, h * .5f, w*.5f + ew + mTVEyeSeparation, h), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
 		} else {
 			if (vr::IVRExtendedDisplay *d = vr::VRExtendedDisplay()) {
 				uint32_t wx, wy, ww, wh;
@@ -532,6 +533,7 @@ void cdvis::DoFrame() {
 
 #pragma region window overlay
 	Profiler::BeginSample(L"Window Overlay");
+
 	sb->DrawTextf(mArial, XMFLOAT2(mWindowCamera->PixelWidth() * .5f, (float)mArial->GetAscender() * .4f), .4f, { 1,1,1,1 }, 
 		L"Density: %d.%d\n"
 		L"Light: %d.%d\n"

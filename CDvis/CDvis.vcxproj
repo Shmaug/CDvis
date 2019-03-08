@@ -154,22 +154,26 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
   <ItemGroup>
     <ClInclude Include="CDialogEventHandler.hpp" />
     <ClInclude Include="cdvis.hpp" />
-    <ClInclude Include="Dicom.hpp" />
+    <ClInclude Include="ImageLoader.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
     <ClInclude Include="VRCamera.hpp" />
     <ClInclude Include="VRDevice.hpp" />
+    <ClInclude Include="VRDial.hpp" />
     <ClInclude Include="VRInteractable.hpp" />
-    <ClInclude Include="VRTools.hpp" />
+    <ClInclude Include="VRPieMenu.hpp" />
+    <ClInclude Include="VRInteraction.hpp" />
     <ClInclude Include="VRUtil.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CDialogEventHandler.cpp" />
     <ClCompile Include="cdvis.cpp" />
-    <ClCompile Include="Dicom.cpp" />
+    <ClCompile Include="ImageLoader.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
     <ClCompile Include="VRCamera.cpp" />
     <ClCompile Include="VRDevice.cpp" />
-    <ClCompile Include="VRTools.cpp" />
+    <ClCompile Include="VRDial.cpp" />
+    <ClCompile Include="VRPieMenu.cpp" />
+    <ClCompile Include="VRInteraction.cpp" />
     <ClCompile Include="VRUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -183,6 +187,16 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
       <FileType>Document</FileType>
     </None>
     <None Include="..\Assets\Shaders\volume.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Assets\Shaders\piemenu.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Assets\Shaders\volume_compute.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

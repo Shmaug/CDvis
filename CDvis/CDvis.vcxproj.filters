@@ -9,10 +9,6 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -21,6 +17,8 @@
     <None Include="..\Assets\Shaders\textured_bump.hlsl" />
     <None Include="..\Assets\Shaders\volume.hlsl" />
     <None Include="..\Assets\Shaders\PBR.hlsli" />
+    <None Include="..\Assets\Shaders\piemenu.hlsl" />
+    <None Include="..\Assets\Shaders\volume_compute.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cdvis.hpp">
@@ -32,22 +30,28 @@
     <ClInclude Include="CDialogEventHandler.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Dicom.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="VRCamera.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VRUtil.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VRTools.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="VRDevice.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VRInteractable.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRPieMenu.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImageLoader.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRDial.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VRInteraction.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -61,19 +65,25 @@
     <ClCompile Include="CDialogEventHandler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Dicom.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="VRCamera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VRUtil.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VRTools.cpp">
+    <ClCompile Include="VRDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VRDevice.cpp">
+    <ClCompile Include="VRPieMenu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ImageLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VRDial.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VRInteraction.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

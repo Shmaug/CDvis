@@ -11,6 +11,12 @@
 
 class VolumeRenderer : public Renderer, public VRInteractable {
 public:
+	enum MASK_MODE {
+		MASK_MODE_ENABLED,
+		MASK_MODE_DISPLAY,
+		MASK_MODE_DISABLED
+	};
+
 	class VolumeRenderJob : public RenderJob {
 	public:
 		VolumeRenderer* mVolume;
@@ -21,7 +27,7 @@ public:
 		VolumeRenderJob(unsigned int queue, VolumeRenderer* vol, Camera* camera, DescriptorTable* tbl, D3D12_GPU_VIRTUAL_ADDRESS cb)
 			: RenderJob(queue), mVolume(vol), mCamera(camera), mSRVTable(tbl), mCB(cb) {}
 
-		void Execute(std::shared_ptr<CommandList> commandList, std::shared_ptr<Material> materialOverride) override;
+		void Execute(const std::shared_ptr<CommandList>& commandList, const std::shared_ptr<Material>& materialOverride) override;
 	};
 
 	VolumeRenderer();
@@ -29,7 +35,9 @@ public:
 	~VolumeRenderer();
 	
 	bool mSlicePlaneEnable;
+	MASK_MODE mMaskMode;
 	bool mISOEnable;
+	bool mInvertDensity;
 	bool mLightingEnable;
 
 	float mDensity;
@@ -40,19 +48,25 @@ public:
 	DirectX::XMFLOAT3 mLightPos;
 	DirectX::XMFLOAT3 mLightDir;
 	int mLightMode;
+	float mLightIntensity;
 	float mLightAngle;
 	float mLightRange;
 	float mLightAmbient;
 
-	void SetSlicePlane(DirectX::XMFLOAT3 p, DirectX::XMFLOAT3 n);
+	void SetSlicePlane(const DirectX::XMFLOAT3& p, const DirectX::XMFLOAT3& n);
 
-	float GetPixel(DirectX::XMUINT3 p) const;
-	float GetDensity(DirectX::XMFLOAT3 uvw, bool slicePlane = false) const;
-	float GetDensityTrilinear(DirectX::XMFLOAT3 uvw, bool slicePlane = false) const;
+	void WorldToUVW(const DirectX::XMFLOAT3& wp, DirectX::XMFLOAT3& uvw);
 
-	void SetTexture(std::shared_ptr<Texture> tex);
+	float GetPixel(const DirectX::XMUINT3& p) const;
+	float GetDensity(const DirectX::XMFLOAT3& uvw, bool slicePlane = false) const;
+	float GetDensityTrilinear(const DirectX::XMFLOAT3& uvw, bool slicePlane = false) const;
 
-	void GatherRenderJobs(std::shared_ptr<CommandList> commandList, std::shared_ptr<Camera> camera, jvector<RenderJob*> &list) override;
+	void SetTexture(const std::shared_ptr<Texture>& tex);
+
+	void FillMask(float value);
+	void PaintMask(const DirectX::XMFLOAT3& lastWorldPos, const DirectX::XMFLOAT3& worldPos, float value, float radius);
+
+	void GatherRenderJobs(const std::shared_ptr<CommandList>& commandList, const std::shared_ptr<Camera>& camera, jvector<RenderJob*> &list) override;
 	bool Visible() override { return mVisible; }
 	bool Draggable() override { return true; }
 
@@ -65,9 +79,11 @@ private:
 	DirectX::XMFLOAT3 mSlicePlaneNormal;
 
 	std::shared_ptr<Texture> mTexture;
-	std::unordered_map<Camera*, std::shared_ptr<DescriptorTable>*> mSRVTables;
-	std::unordered_map<Camera*, std::shared_ptr<ConstantBuffer>> mCBuffers;
 	std::shared_ptr<Mesh> mCubeMesh;
+	std::unordered_map<Camera*, std::shared_ptr<ConstantBuffer>> mCBuffers;
+	std::unordered_map<Camera*, std::shared_ptr<DescriptorTable>*> mSRVTables;
 	std::shared_ptr<Shader> mShader;
+
+	std::shared_ptr<Shader> mComputeShader;
 };
 

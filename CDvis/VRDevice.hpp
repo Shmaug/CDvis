@@ -2,12 +2,18 @@
 
 #include <MeshRenderer.hpp>
 #include <openvr.h>
+#include <unordered_set>
+
+#include "VRInteractable.hpp"
+
+class VRInteraction;
 
 class VRDevice : public MeshRenderer {
 public:
 	VRDevice(jwstring name, unsigned int deviceIndex);
 	~VRDevice();
 
+	// Update tracking and button state
 	void UpdateDevice(vr::IVRSystem* hmd, const vr::TrackedDevicePose_t& pose);
 
 	void TriggerHapticPulse(unsigned short duration) const;
@@ -49,7 +55,12 @@ public:
 	DirectX::XMFLOAT3 DeltaDevicePosition() const { return mDeltaDevicePosition; }
 	DirectX::XMFLOAT4 DeltaDeviceRotation() const { return mDeltaDeviceRotation; }
 
+	bool Visible() override { return mVisible && mTracking; }
+
+	bool mTracking;
+
 private:
+	friend class VRInteraction;
 	const unsigned int mDeviceIndex;
 
 	vr::IVRSystem* mHmd;
@@ -65,5 +76,14 @@ private:
 
 	DirectX::XMFLOAT3 mDeltaDevicePosition;
 	DirectX::XMFLOAT4 mDeltaDeviceRotation;
+
+	struct DragOperation {
+		DirectX::XMFLOAT3 mDragPos;
+		DirectX::XMFLOAT4 mDragRotation;
+		std::shared_ptr<Object> mObject;
+	};
+	jvector<DragOperation> mDragging;
+	std::unordered_set<std::shared_ptr<VRInteractable>> mHovered;
+	std::unordered_set<std::shared_ptr<VRInteractable>> mActivated;
 };
 
