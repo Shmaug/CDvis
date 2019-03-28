@@ -14,6 +14,8 @@
 
 #include <algorithm>
 
+#include "lodepng.hpp"
+
 // DCMTK libraries (order matters)
 #pragma comment(lib, "ws2_32")
 #pragma comment(lib, "Iphlpapi.lib")
@@ -237,22 +239,25 @@ shared_ptr<Texture> LoadDicomVolume(const jvector<jstring>& files, XMFLOAT3 &siz
 	return tex;
 }
 
-shared_ptr<Texture> ImageLoader::LoadImage(jwstring path, XMFLOAT3 &size) {
+shared_ptr<Texture> ImageLoader::LoadImage(const jwstring& path, XMFLOAT3 &size) {
 	if (!PathFileExistsW(path.c_str())) {
-		OutputDebugf(L"%S Does not exist!", path.c_str());
+		OutputDebugf(L"%S Does not exist!\n", path.c_str());
 		return nullptr;
 	}
 
 	char pathA[MAX_PATH];
 	WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, pathA, (int)path.length() + 1, NULL, NULL);
 
-	if (GetExtA(pathA) == "dcm")
+	jstring ext = GetExtA(pathA);
+	if (ext == "dcm")
 		return LoadDicomImage(pathA, size);
-	else
+	else if (ext == "raw")
 		return LoadRawImage(pathA, size);
+	else
+		return nullptr;
 }
 
-void GetFiles(jwstring folder, jvector<jstring> &files) {
+void GetFiles(const jwstring& folder, jvector<jstring> &files) {
 	char pathA[MAX_PATH];
 	WideCharToMultiByte(CP_UTF8, 0, folder.c_str(), -1, pathA, (int)folder.length() + 1, NULL, NULL);
 	jstring path(pathA);
@@ -274,24 +279,91 @@ void GetFiles(jwstring folder, jvector<jstring> &files) {
 			// file is a directory
 		} else {
 			jstring ext = GetExtA(c);
-			if (ext == "dcm" || ext == "raw")
+			if (ext == "dcm" || ext == "raw" || ext == "png")
 				files.push_back(GetFullPathA(c));
 		}
 	} while (FindNextFileA(hFind, &ffd) != 0);
 
 	FindClose(hFind);
 }
-shared_ptr<Texture> ImageLoader::LoadVolume(jwstring path, DirectX::XMFLOAT3 &size) {
+shared_ptr<Texture> ImageLoader::LoadVolume(const jwstring& path, DirectX::XMFLOAT3 &size) {
 	if (!PathFileExistsW(path.c_str())) {
-		OutputDebugf(L"%S Does not exist!", path.c_str());
+		OutputDebugf(L"%S Does not exist!\n", path.c_str());
 		return nullptr;
 	}
 
 	jvector<jstring> files;
 	GetFiles(path, files);
 
-	if (GetExtA(files[0]) == "dcm")
+	if (files.size() == 0) return nullptr;
+
+	jstring ext = GetExtA(files[0]);
+	if (ext == "dcm")
 		return LoadDicomVolume(files, size);
-	else
+	else if (ext == "raw")
 		return LoadRawVolume(files, size);
+	else
+		return nullptr;
+}
+
+struct MaskSliceArgs {
+	const char* path;
+	uint16_t* slice;
+	unsigned int width;
+	unsigned int height;
+};
+
+DWORD WINAPI ProcessMaskSlice(LPVOID lpParam) {
+	MaskSliceArgs* args = (MaskSliceArgs*)lpParam;
+
+	std::vector<unsigned char> rgba;
+	unsigned int w, h;
+	if (lodepng::decode(rgba, w, h, args->path)) {
+		OutputDebugf(L"%S: Failed to load PNG!\n", args->path);
+		return 0;
+	}
+	if (w != args->width || h != args->height) {
+		OutputDebugf(L"%S: Incorrect dimensions!\n", args->path);
+		return 0;
+	}
+
+	for (unsigned int x = 0; x < w; x++)
+		for (unsigned int y = 0; y < h; y++) {
+			unsigned int p = y * w + x;
+			args->slice[2 * p + 1] = (uint16_t)((unsigned int)rgba[4 * p] * 257u);
+		}
+
+	return 0;
+}
+
+void ImageLoader::LoadMask(const jwstring& path, const shared_ptr<Texture>& texture) {
+	if (!PathFileExistsW(path.c_str())) {
+		OutputDebugf(L"%S Does not exist!\n", path.c_str());
+		return;
+	}
+
+	jvector<jstring> files;
+	GetFiles(path, files);
+
+	if (files.size() != texture->Depth()) {
+		OutputDebugf(L"Incorrect slice count! (%d != %d)\n", (int)files.size(), (int)texture->Depth());
+		return;
+	}
+
+	std::sort(files.data(), files.data() + files.size(), [](const jstring& a, const jstring& b) {
+		return atoi(GetNameA(a).c_str()) > atoi(GetNameA(b).c_str());
+	});
+
+	jvector<MaskSliceArgs> args;
+	args.resize(files.size());
+
+	uint16_t* data = (uint16_t*)texture->GetPixelData();
+	unsigned int w = texture->Width();
+	unsigned int h = texture->Height();
+	for (unsigned int i = 0; i < files.size(); i++) {
+		args[i] = { files[i].c_str(), data + 2 * w * h * i, w, h };
+		ProcessMaskSlice(&args[i]);
+	}
+
+	texture->Upload();
 }

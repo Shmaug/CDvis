@@ -61,6 +61,7 @@ public:
 	float GetDensity(const DirectX::XMFLOAT3& uvw, bool slicePlane = false) const;
 	float GetDensityTrilinear(const DirectX::XMFLOAT3& uvw, bool slicePlane = false) const;
 
+	std::shared_ptr<Texture> GetTexture() const { return mTexture; }
 	void SetTexture(const std::shared_ptr<Texture>& tex);
 
 	void FillMask(float value);

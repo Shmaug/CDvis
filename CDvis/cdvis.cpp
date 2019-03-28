@@ -185,13 +185,25 @@ void cdvis::BrowseVolume() {
 	mVolume->SetTexture(ImageLoader::LoadVolume(folder, size));
 	mVolume->LocalScale(size);
 }
+void cdvis::BrowseMask() {
+	jwstring folder = BrowseFolder();
+	if (folder.empty()) return;
+
+	auto tex = mVolume->GetTexture();
+	ImageLoader::LoadMask(folder, tex);
+	mVolume->SetTexture(tex);
+}
 
 void cdvis::WindowEvent(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	if (message == WM_KEYDOWN) {
-		if (wParam == 0x49 && GetKeyState(VK_CONTROL)) // ctrl-i
-			BrowseImage();
-		if (wParam == 0x4F && GetKeyState(VK_CONTROL)) // ctrl-o
-			BrowseVolume();
+		if (GetKeyState(VK_CONTROL) & 0x8000) { // ctrl
+			if (wParam == 0x49) // ctrl-i
+				BrowseImage();
+			if (wParam == 0x4F) // ctrl-o
+				BrowseVolume();
+			if (wParam == 0x4D) // ctrl-m
+				BrowseMask();
+		}
 	}
 }
 

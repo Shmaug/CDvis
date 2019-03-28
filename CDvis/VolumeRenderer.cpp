@@ -31,6 +31,7 @@ VolumeRenderer::~VolumeRenderer() {
 
 void VolumeRenderer::SetTexture(const std::shared_ptr<Texture>& tex) {
 	mTexture = tex;
+	if (!mTexture) return;
 	for (const auto &it : mSRVTables)
 		for (unsigned int i = 0; i < Graphics::BufferCount(); i++) {
 			it.second[i]->SetSRV(0, mTexture);
@@ -301,22 +302,25 @@ void VolumeRenderer::VolumeRenderJob::Execute(const shared_ptr<CommandList>& com
 	else
 		commandList->DisableKeyword("ISO");
 
-	if (mVolume->mTexture->Format() == DXGI_FORMAT_R8G8B8A8_UNORM)
+	if (mVolume->mTexture->Format() == DXGI_FORMAT_R8G8B8A8_UNORM) {
 		commandList->EnableKeyword("COLOR");
-	else
-		commandList->DisableKeyword("COLOR");
-
-	switch (mVolume->mMaskMode){
-	default:
 		commandList->DisableKeyword("MASK");
 		commandList->DisableKeyword("MASK_DISP");
-		break;
-	case MASK_MODE_ENABLED:
-		commandList->EnableKeyword("MASK");
-		break;
-	case MASK_MODE_DISPLAY:
-		commandList->EnableKeyword("MASK_DISP");
-		break;
+	} else {
+		commandList->DisableKeyword("COLOR");
+
+		switch (mVolume->mMaskMode) {
+		default:
+			commandList->DisableKeyword("MASK");
+			commandList->DisableKeyword("MASK_DISP");
+			break;
+		case MASK_MODE_ENABLED:
+			commandList->EnableKeyword("MASK");
+			break;
+		case MASK_MODE_DISPLAY:
+			commandList->EnableKeyword("MASK_DISP");
+			break;
+		}
 	}
 
 	XMMATRIX w2o = XMLoadFloat4x4(&mVolume->WorldToObject());

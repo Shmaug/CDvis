@@ -37,6 +37,7 @@ public:
 
 	void BrowseImage();
 	void BrowseVolume();
+	void BrowseMask();
 
 private:
 	double mfps;
