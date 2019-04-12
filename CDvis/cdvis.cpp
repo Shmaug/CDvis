@@ -391,34 +391,36 @@ void cdvis::Update(double total, double delta) {
 		}
 	}
 
-	if (Input::KeyDown(KeyCode::W))
-		mVolume->mDensity -= 1.5f * (float)delta;
-	if (Input::KeyDown(KeyCode::E))
-		mVolume->mDensity += 1.5f * (float)delta;
+	if (!Input::KeyDown(KeyCode::ControlKey)) {
+		if (Input::KeyDown(KeyCode::W))
+			mVolume->mDensity -= 1.5f * (float)delta;
+		if (Input::KeyDown(KeyCode::E))
+			mVolume->mDensity += 1.5f * (float)delta;
 
-	if (Input::KeyDown(KeyCode::S))
-		mVolume->mLightDensity -= 5.f * (float)delta;
-	if (Input::KeyDown(KeyCode::D))
-		mVolume->mLightDensity += 5.f * (float)delta;
+		if (Input::KeyDown(KeyCode::S))
+			mVolume->mLightDensity -= 5.f * (float)delta;
+		if (Input::KeyDown(KeyCode::D))
+			mVolume->mLightDensity += 5.f * (float)delta;
 
-	if (Input::KeyDown(KeyCode::X))
-		mVolume->mExposure -= 1.5f * (float)delta;
-	if (Input::KeyDown(KeyCode::C))
-		mVolume->mExposure += 1.5f * (float)delta;
+		if (Input::KeyDown(KeyCode::X))
+			mVolume->mExposure -= 1.5f * (float)delta;
+		if (Input::KeyDown(KeyCode::C))
+			mVolume->mExposure += 1.5f * (float)delta;
 
-	if (Input::OnKeyDown(KeyCode::A))
-		mVolume->mMaskMode = (VolumeRenderer::MASK_MODE)((mVolume->mMaskMode + 1) % 3);
+		if (Input::OnKeyDown(KeyCode::A))
+			mVolume->mMaskMode = (VolumeRenderer::MASK_MODE)((mVolume->mMaskMode + 1) % 3);
 
-	if (Input::KeyDown(KeyCode::N))
-		mVolume->mISOValue -= .2f * (float)delta;
-	if (Input::KeyDown(KeyCode::M))
-		mVolume->mISOValue += .2f * (float)delta;
-	mVolume->mISOValue = fmaxf(fminf(mVolume->mISOValue, 1.f), 0.f);
+		if (Input::KeyDown(KeyCode::N))
+			mVolume->mISOValue -= .2f * (float)delta;
+		if (Input::KeyDown(KeyCode::M))
+			mVolume->mISOValue += .2f * (float)delta;
+		mVolume->mISOValue = fmaxf(fminf(mVolume->mISOValue, 1.f), 0.f);
 
-	if (Input::KeyDown(KeyCode::Left))
-		mTVEyeSeparation -= 10.f * (float)delta;
-	else if (Input::KeyDown(KeyCode::Right))
-		mTVEyeSeparation += 10.f * (float)delta;
+		if (Input::KeyDown(KeyCode::Left))
+			mTVEyeSeparation -= 10.f * (float)delta;
+		else if (Input::KeyDown(KeyCode::Right))
+			mTVEyeSeparation += 10.f * (float)delta;
+	}
 	#pragma endregion
 }
 
@@ -433,8 +435,8 @@ void cdvis::PreRender(const shared_ptr<CommandList>& commandList) {
 	d.w = cosf(XMConvertToRadians(60.f));
 	if (!mLight->mActivated) c.x = c.y = c.z = 0.f;
 
-	commandList->SetGlobalFloat3("LightAmbientSpec", { .5f, .5f, .5f });
-	commandList->SetGlobalFloat3("LightAmbientDiff", { .5f, .5f, .5f });
+	commandList->SetGlobalFloat3("LightAmbientSpec", { .75f, .75f, .75f });
+	commandList->SetGlobalFloat3("LightAmbientDiff", { .75f, .75f, .75f });
 	commandList->SetGlobalFloat4("LightColor", c);
 	commandList->SetGlobalFloat4("LightPosition", p);
 	commandList->SetGlobalFloat4("LightDirection", d);

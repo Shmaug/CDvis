@@ -163,6 +163,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="VRInteractable.hpp" />
     <ClInclude Include="VRPieMenu.hpp" />
     <ClInclude Include="VRInteraction.hpp" />
+    <ClInclude Include="VRToolTips.hpp" />
     <ClInclude Include="VRUtil.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -176,6 +177,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClCompile Include="VRDial.cpp" />
     <ClCompile Include="VRPieMenu.cpp" />
     <ClCompile Include="VRInteraction.cpp" />
+    <ClCompile Include="VRToolTips.cpp" />
     <ClCompile Include="VRUtil.cpp" />
   </ItemGroup>
   <ItemGroup>

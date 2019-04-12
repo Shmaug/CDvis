@@ -164,8 +164,8 @@ float4 Sample(float3 p) {
 	#ifdef COLOR
 	s.rgb = Volume.SampleLevel(Sampler, p, 0).rgb;
 
-	float3 hsv = RGBtoHSV(s.rgb);
-	s.a = (1 - hsv.x) * (hsv.z > .1);
+	float3 hcv = RGBtoHCV(s.rgb);
+	s.a = (1 - hcv.x) * (hcv.z > .1);
 	s.a *= s.a;
 
 	s.rgb *= Root.Exposure;

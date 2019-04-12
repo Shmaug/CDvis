@@ -306,36 +306,6 @@ shared_ptr<Texture> ImageLoader::LoadVolume(const jwstring& path, DirectX::XMFLO
 		return nullptr;
 }
 
-struct MaskSliceArgs {
-	const char* path;
-	uint16_t* slice;
-	unsigned int width;
-	unsigned int height;
-};
-
-DWORD WINAPI ProcessMaskSlice(LPVOID lpParam) {
-	MaskSliceArgs* args = (MaskSliceArgs*)lpParam;
-
-	std::vector<unsigned char> rgba;
-	unsigned int w, h;
-	if (lodepng::decode(rgba, w, h, args->path)) {
-		OutputDebugf(L"%S: Failed to load PNG!\n", args->path);
-		return 0;
-	}
-	if (w != args->width || h != args->height) {
-		OutputDebugf(L"%S: Incorrect dimensions!\n", args->path);
-		return 0;
-	}
-
-	for (unsigned int x = 0; x < w; x++)
-		for (unsigned int y = 0; y < h; y++) {
-			unsigned int p = y * w + x;
-			args->slice[2 * p + 1] = (uint16_t)((unsigned int)rgba[4 * p] * 257u);
-		}
-
-	return 0;
-}
-
 void ImageLoader::LoadMask(const jwstring& path, const shared_ptr<Texture>& texture) {
 	if (!PathFileExistsW(path.c_str())) {
 		OutputDebugf(L"%S Does not exist!\n", path.c_str());
@@ -354,16 +324,24 @@ void ImageLoader::LoadMask(const jwstring& path, const shared_ptr<Texture>& text
 		return atoi(GetNameA(a).c_str()) > atoi(GetNameA(b).c_str());
 	});
 
-	jvector<MaskSliceArgs> args;
-	args.resize(files.size());
-
 	uint16_t* data = (uint16_t*)texture->GetPixelData();
 	unsigned int w = texture->Width();
 	unsigned int h = texture->Height();
 	for (unsigned int i = 0; i < files.size(); i++) {
-		args[i] = { files[i].c_str(), data + 2 * w * h * i, w, h };
-		ProcessMaskSlice(&args[i]);
+		OutputDebugf(L"%S\n", files[i].c_str());
+		std::vector<unsigned char> rgba;
+		unsigned int w, h;
+		if (lodepng::decode(rgba, w, h, files[i].c_str())) continue;
+
+		float xs = (float)w / texture->Width();
+		float ys = (float)h / texture->Height();
+
+		uint16_t* slice = data + 2 * (i * w * h);
+		for (unsigned int x = 0; x < texture->Width(); x++)
+			for (unsigned int y = 0; y < texture->Height(); y++) {
+				slice[2 * (x + y * texture->Width()) + 1] = rgba[4 * ((int)(x * xs) + (int)(y * ys) * w)] * 257u;
+			}
 	}
 
-	texture->Upload();
+	texture->Upload(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, true);
 }

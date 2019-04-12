@@ -15,12 +15,14 @@ class VRDevice;
 class VolumeRenderer;
 class VRPieMenu;
 class VRController;
+class VRToolTips;
 
 class VRInteraction {
 public:
 	static const vr::EVRButtonId GrabButton = vr::EVRButtonId::k_EButton_Grip;
 	static const vr::EVRButtonId PieMenuButton = vr::EVRButtonId::k_EButton_SteamVR_Touchpad;
 	static const vr::EVRButtonId ActivateButton = vr::EVRButtonId::k_EButton_SteamVR_Trigger;
+	static const vr::EVRButtonId HelpButton = vr::EVRButtonId::k_EButton_ApplicationMenu;
 
 	enum VRTOOL {
 		VRTOOL_PLANE,
@@ -52,6 +54,7 @@ private:
 	std::shared_ptr<MeshRenderer> mPlane;
 	std::shared_ptr<HudText> mHudText;
 	std::shared_ptr<VRPieMenu> mPieMenu;
+	std::shared_ptr<VRToolTips> mToolTips;
 	std::shared_ptr<VRDevice> mToolController;
 };
 

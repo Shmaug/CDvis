@@ -14,6 +14,7 @@
 #include "VRInteractable.hpp"
 #include "VolumeRenderer.hpp"
 #include "VRPieMenu.hpp"
+#include "VRToolTips.hpp"
 
 using namespace std;
 using namespace DirectX;
@@ -45,6 +46,8 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 	penTex->Upload();
 	auto pieicons = AssetDatabase::GetAsset<Texture>(L"pie_icons");
 	pieicons->Upload();
+	auto icons = AssetDatabase::GetAsset<Texture>(L"icons");
+	icons->Upload();
 	
 	auto penMat = shared_ptr<Material>(new Material(L"Pen", textured));
 	penMat->SetTexture("Texture", penTex, -1);
@@ -56,6 +59,11 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 
 	auto textMat = shared_ptr<Material>(new Material(L"Text", textured));
 	textMat->EnableKeyword("NOLIGHTING");
+
+	auto tooltipMat = shared_ptr<Material>(new Material(L"Text", textured));
+	tooltipMat->EnableKeyword("NOLIGHTING");
+	tooltipMat->CullMode(D3D12_CULL_MODE_NONE);
+	tooltipMat->SetTexture("Texture", icons, -1);
 
 	mPen = scene->AddObject<MeshRenderer>(L"Pen");
 	mPen->SetMesh(penMesh);
@@ -79,6 +87,10 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 	mHudText->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PIDIV2, 0, 0));
 	mHudText->LocalPosition(.5f, 1.f, -.1f);
 	mHudText->LocalScale(.1f, .1f, .1f);
+
+	mToolTips = scene->AddObject<VRToolTips>(L"ToolTips");
+	mToolTips->SetMaterial(tooltipMat);
+	mToolTips->mVisible = false;
 }
 
 void VRInteraction::ProcessInput(const shared_ptr<Scene>& scene, const jvector<shared_ptr<VRDevice>>& controllers, const shared_ptr<VolumeRenderer>& volume, double deltaTime) {
@@ -123,6 +135,12 @@ void VRInteraction::ProcessInput(const shared_ptr<Scene>& scene, const jvector<s
 			}
 
 			if (x) controller->TriggerHapticPulse(x);
+		}
+
+		if (controller->ButtonPressedFirst(HelpButton)) {
+			mToolTips->mVisible = !mToolTips->mVisible;
+			if (mToolTips->mVisible)
+				mToolTips->Parent(controller);
 		}
 
 		// volume haptics
