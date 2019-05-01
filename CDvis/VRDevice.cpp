@@ -9,7 +9,10 @@
 using namespace std;
 using namespace DirectX;
 
-VRDevice::VRDevice(jwstring name, unsigned int index) : MeshRenderer(name), mDeviceIndex(index) {}
+VRDevice::VRDevice(jwstring name, unsigned int index)
+	: MeshRenderer(name), mDeviceIndex(index), mHmd(nullptr),
+	mDeltaDevicePosition(XMFLOAT3()), mDeltaDeviceRotation(XMFLOAT4(0,0,0,1)), mDevicePosition(XMFLOAT3()), mDeviceRotation(XMFLOAT4(0,0,0,1)),
+	mLastDevicePosition(XMFLOAT3()), mLastDeviceRotation(XMFLOAT4(0,0,0,1)), mState(), mLastState(), mTracking(false) {}
 VRDevice::~VRDevice() {}
 
 void VRDevice::UpdateDevice(vr::IVRSystem* hmd, const vr::TrackedDevicePose_t& pose) {
@@ -43,16 +46,15 @@ void VRDevice::UpdateDevice(vr::IVRSystem* hmd, const vr::TrackedDevicePose_t& p
 	// interact with objects
 	static jvector<shared_ptr<Object>> boundsIntersect;
 	boundsIntersect.clear();
-	GetScene()->Intersect(BoundingSphere(mDevicePosition, .05f), boundsIntersect);
+	GetScene()->Intersect(BoundingSphere(mDevicePosition, .025f), boundsIntersect);
 
-	for (auto &it = mHovered.begin(); it != mHovered.end();) {
+	for (auto it = mHovered.begin(); it != mHovered.end();) {
 		if (boundsIntersect.find(dynamic_pointer_cast<Object>(*it)) == -1) {
 			(*it)->HoverExit(this_controller);
 			it = mHovered.erase(it);
-		} else
+		} else 
 			it++;
 	}
-
 	for (unsigned int i = 0; i < boundsIntersect.size(); i++) {
 		auto g = dynamic_pointer_cast<VRInteractable>(boundsIntersect[i]);
 		if (!g) continue;
@@ -62,16 +64,23 @@ void VRDevice::UpdateDevice(vr::IVRSystem* hmd, const vr::TrackedDevicePose_t& p
 			mHovered.insert(g);
 		}
 
+		// track activating this object
 		if (activateStart) {
 			g->ActivatePress(this_controller);
 			mActivated.insert(g);
 		}
 
 		// Drag start
-		if (g->Draggable() && grabStart) {
+		if (grabStart && g->Draggable()) {
 			DragOperation* d = nullptr;
 			for (unsigned int k = 0; k < mDragging.size(); k++) {
-				if (mDragging[k].mObject == boundsIntersect[i]) {
+				auto o = mDragging[k].mObject.lock();
+				if (!o) {
+					mDragging.remove(k);
+					k--;
+					continue;
+				}
+				if (dynamic_pointer_cast<Object>(o) == boundsIntersect[i]) {
 					d = &mDragging[k];
 					break;
 				}
@@ -82,30 +91,42 @@ void VRDevice::UpdateDevice(vr::IVRSystem* hmd, const vr::TrackedDevicePose_t& p
 				XMVECTOR op = XMLoadFloat3(&boundsIntersect[i]->WorldPosition());
 				XMVECTOR or = XMLoadFloat4(&boundsIntersect[i]->WorldRotation());
 
-				d->mObject = boundsIntersect[i];
+				d->mObject = dynamic_pointer_cast<VRInteractable>(boundsIntersect[i]);
 				XMStoreFloat3(&(d->mDragPos), XMVector3Transform(op, XMLoadFloat4x4(&WorldToObject())));
 				XMStoreFloat4(&(d->mDragRotation), XMQuaternionMultiply(or , XMQuaternionInverse(XMLoadFloat4(&mDeviceRotation))));
 
-				g->DragStart(this_controller);
 				TriggerHapticPulse(600);
+				g->DragStart(this_controller);
 			}
 		}
 	}
 
 	if (!activate) {
-		for (const auto &it : mActivated)
+		for (const auto& it : mActivated)
 			it->ActivateRelease(this_controller);
 		mActivated.clear();
 	}
 
 	// apply drag
 	for (unsigned int i = 0; i < mDragging.size(); i++) {
+		auto obj = mDragging[i].mObject.lock();
+		if (!obj) {
+			mDragging.remove(i);
+			i--;
+			continue;
+		}
+
 		if (grab) {
-			auto o = mDragging[i].mObject.get();
-			o->LocalPosition(XMVector3Transform(XMLoadFloat3(&mDragging[i].mDragPos), XMLoadFloat4x4(&ObjectToWorld())));
-			o->LocalRotation(XMQuaternionMultiply(XMLoadFloat4(&mDragging[i].mDragRotation), XMLoadFloat4(&mDeviceRotation)));
+			auto object = dynamic_pointer_cast<Object>(obj);
+			XMVECTOR pos = XMVector3Transform(XMLoadFloat3(&mDragging[i].mDragPos), XMLoadFloat4x4(&ObjectToWorld()));
+			XMVECTOR rot = XMQuaternionMultiply(XMLoadFloat4(&mDragging[i].mDragRotation), XMLoadFloat4(&mDeviceRotation));
+			if (auto parent = object->Parent()) {
+				pos = XMVector3Transform(pos, XMLoadFloat4x4(&parent->WorldToObject()));
+				rot = XMQuaternionMultiply(rot, XMQuaternionInverse(XMLoadFloat4(&parent->WorldRotation())));
+			}
+			obj->Drag(object, this_controller, pos, rot);
 		} else {
-			dynamic_pointer_cast<VRInteractable>(mDragging[i].mObject)->DragStop(this_controller);
+			obj->DragStop(this_controller);
 			TriggerHapticPulse(500);
 			mDragging.remove(i);
 			i--;

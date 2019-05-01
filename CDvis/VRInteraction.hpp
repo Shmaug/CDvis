@@ -16,6 +16,7 @@ class VolumeRenderer;
 class VRPieMenu;
 class VRController;
 class VRToolTips;
+class VRDial;
 
 class VRInteraction {
 public:
@@ -52,9 +53,12 @@ private:
 	DirectX::XMFLOAT3 mLastPenPos;
 	std::shared_ptr<MeshRenderer> mPen;
 	std::shared_ptr<MeshRenderer> mPlane;
-	std::shared_ptr<HudText> mHudText;
 	std::shared_ptr<VRPieMenu> mPieMenu;
 	std::shared_ptr<VRToolTips> mToolTips;
 	std::shared_ptr<VRDevice> mToolController;
+
+	std::shared_ptr<VRDial> mThresholdDial;
+	std::shared_ptr<VRDial> mDensityDial;
+	std::shared_ptr<VRDial> mExposureDial;
 };
 

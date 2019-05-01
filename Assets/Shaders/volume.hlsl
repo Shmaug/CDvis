@@ -2,10 +2,9 @@
 #pragma rootsig RootSig
 #pragma vertex vsmain
 #pragma pixel psmain
-#pragma multi_compile LIGHT_DIRECTIONAL LIGHT_SPOT LIGHT_POINT
+
 #pragma multi_compile PLANE
-#pragma multi_compile ISO
-#pragma multi_compile COLOR MASK MASK_DISP INVERT
+#pragma multi_compile COLOR
 
 #define RootSig \
 "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |" \
@@ -16,22 +15,22 @@
 "StaticSampler(s0, filter=FILTER_MIN_MAG_MIP_LINEAR, visibility=SHADER_VISIBILITY_PIXEL, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK,"\
 	"addressU=TEXTURE_ADDRESS_BORDER, addressV=TEXTURE_ADDRESS_BORDER, addressW=TEXTURE_ADDRESS_BORDER)"
 
-struct RootData {
+struct RootBuffer {
 	float3 CameraPosition;
-	float Projection43;
+	float  Projection43;
 	float3 LightPosition;
-	float Projection33;
+	float  Projection33;
 	float3 PlanePoint;
-	float Density;
+	float  Density;
 	float3 PlaneNormal;
-	float LightDensity;
+	float  LightDensity;
 	float3 LightDirection;
-	float Exposure;
+	float  Exposure;
 	float3 WorldScale;
-	float LightIntensity;
-	float LightAngle;
-	float LightAmbient;
-	float ISOValue;
+	float  LightIntensity;
+	float  LightAngle;
+	float  LightAmbient;
+	float  TresholdValue;
 };
 struct CBData {
 	float4x4 ObjectToView;
@@ -40,10 +39,10 @@ struct CBData {
 	float4x4 Projection;
 };
 
-ConstantBuffer<RootData> Root : register(b0);
+ConstantBuffer<RootBuffer> Root : register(b0);
 ConstantBuffer<CBData> CB : register(b1);
 #ifdef COLOR
-Texture3D<float3> Volume : register(t0);
+Texture3D<float4> Volume : register(t0);
 #else
 Texture3D<float2> Volume : register(t0);
 #endif
@@ -98,111 +97,22 @@ float RayPlane(float3 ro, float3 rd, float3 planep, float3 planen) {
 	return d > 1e-5 ? (t / d) : (t > 0 ? 1e5 : -1e5);
 }
 
-#ifdef COLOR
-#define Epsilon 1e-10
-
-float3 RGBtoHCV(in float3 RGB) {
-	// Based on work by Sam Hocevar and Emil Persson
-	float4 P = (RGB.g < RGB.b) ? float4(RGB.bg, -1.0, 2.0 / 3.0) : float4(RGB.gb, 0.0, -1.0 / 3.0);
-	float4 Q = (RGB.r < P.x) ? float4(P.xyw, RGB.r) : float4(RGB.r, P.yzx);
-	float C = Q.x - min(Q.w, Q.y);
-	float H = abs((Q.w - Q.y) / (6 * C + Epsilon) + Q.z);
-	return float3(H, C, Q.x);
-}
-float3 RGBtoHSV(in float3 RGB) {
-	float3 HCV = RGBtoHCV(RGB);
-	float S = HCV.y / (HCV.z + Epsilon);
-	return float3(HCV.x, S, HCV.z);
-}
-#endif
-
-float SampleDensity(float3 p) {
-	float a;
-
-	#ifdef COLOR
-	float3 rgb = Volume.SampleLevel(Sampler, p, 0).rgb;
-
-	float3 hsv = RGBtoHSV(rgb);
-	a = (1 - hsv.x) * (hsv.z > .1);
-	a *= a;
-
-	#else
-
-	float2 x = Volume.SampleLevel(Sampler, p, 0).rg;
-
-	#ifdef MASK
-	a = x.r * x.g;
-	#else
-	a = x.r;
-	#endif
-
-	#endif
-
-
-	#ifdef PLANE
-	a = (dot((p - .5) - Root.PlanePoint, Root.PlaneNormal) < 0) ? 0 : a;
-	#endif
-
-	#ifdef INVERT
-	a = 1 - a;
-	#endif
-
-	#ifdef ISO
-	//a = (s.a > Root.ISOValue) * s.a; // cutoff for hard edges
-	a = max(0, a - Root.ISOValue); // subtractive for soft edges
-	#endif
-	
-	#if defined(MASK_DISP) && !defined(COLOR)
-	a = .01 * a + x.g;
-	#endif
-
-	return a * Root.Density;
-}
 float4 Sample(float3 p) {
 	float4 s;
 
 	#ifdef COLOR
-	s.rgb = Volume.SampleLevel(Sampler, p, 0).rgb;
-
-	float3 hcv = RGBtoHCV(s.rgb);
-	s.a = (1 - hcv.x) * (hcv.z > .1);
-	s.a *= s.a;
-
-	s.rgb *= Root.Exposure;
-
+	s = Volume.SampleLevel(Sampler, p, 0);
 	#else
-
-	float2 x = Volume.SampleLevel(Sampler, p, 0).rg;
-
-	#ifdef MASK
-	s = x.r * x.g;
-	#else
-	s = x.r;
-	s.rgb *= Root.Exposure;
+	float2 ra = Volume.SampleLevel(Sampler, p, 0).rg;
+	s.rgb = ra.r;
+	s.a = ra.g;
 	#endif
-
-	#endif
-
 
 	#ifdef PLANE
 	s.a = (dot((p - .5) - Root.PlanePoint, Root.PlaneNormal) < 0) ? 0 : s.a;
 	#endif
 
-	#ifdef INVERT
-	s.a = 1 - s.a;
-	#endif
-
-	#ifdef ISO
-	//s.a = (s.a > Root.ISOValue) * s.a; // cutoff for hard edges
-	s.a = max(0, s.a - Root.ISOValue); // subtractive for soft edges
-	#endif
-	
-	#if defined(MASK_DISP) && !defined(COLOR)
-	s.rgb += float3(.549, 1, .6) * x.g;
-	s.a = .01 * s.a + x.g;
-	#endif
-
-	return s * Root.Density;
+	return s;
 }
 
 float LinearDepth(float d) {
@@ -242,8 +152,7 @@ float4 psmain(v2f i) : SV_Target {
 
 	float4 sum = 0;
 
-	#define dt .002
-	#define ldt .01
+	#define dt .0015
 	uint steps = 0;
 	float pd = 0;
 	for (float t = intersect.x; t < intersect.y;) {
@@ -258,7 +167,7 @@ float4 psmain(v2f i) : SV_Target {
 				float t0 = t - dt * 3;
 				float t1 = t;
 				float tm;
-				#define BINARY_SUBDIV tm = (t0 + t1) * .5; p = ro + rd * tm; if (SampleDensity(p)) t1 = tm; else t0 = tm;
+				#define BINARY_SUBDIV tm = (t0 + t1) * .5; p = ro + rd * tm; if (Sample(p).a) t1 = tm; else t0 = tm;
 				BINARY_SUBDIV
 				BINARY_SUBDIV
 				BINARY_SUBDIV
@@ -266,37 +175,6 @@ float4 psmain(v2f i) : SV_Target {
 				t = tm;
 				col = Sample(p);
 			}
-
-			#if defined(LIGHT_DIRECTIONAL)
-
-			float3 uvwldir = -Root.LightDirection / Root.WorldScale;
-			float ld = SampleDensity(p + uvwldir * ldt) + SampleDensity(p + uvwldir * ldt * 2);
-
-			ld *= Root.LightDensity * ldt;
-			col.rgb *= (exp(-ld) + Root.LightAmbient) * Root.LightIntensity; // extinction = e^(-x)
-
-			#elif defined(LIGHT_SPOT) || defined(LIGHT_POINT)
-
-			float3 wp = (p - .5) * Root.WorldScale;
-			float3 ldir = Root.LightPosition - wp;
-			float dist = length(ldir);
-			ldir /= dist;
-
-			float3 uvwldir = ldir / Root.WorldScale;
-
-			// sum density from 2 samples towards the light source
-			float ld = SampleDensity(p + uvwldir * ldt) + SampleDensity(p + uvwldir * ldt * 2);
-
-			dist += 1;
-
-			ld *= Root.LightDensity * ldt;
-			col.rgb *= (exp(-ld) // extinction = e^(-x)
-				* 1 / (dist * dist) // LightDistanceAttenuation
-			#ifdef LIGHT_SPOT
-				* saturate(10 * (max(0, dot(Root.LightDirection, -ldir)) - Root.LightAngle)) // LightAngleAttenuation
-			#endif
-				+ Root.LightAmbient) * Root.LightIntensity;
-			#endif
 
 			col.rgb *= col.a;
 			sum += col * (1 - sum.a);

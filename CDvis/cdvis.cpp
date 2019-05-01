@@ -23,6 +23,7 @@
 #include "VRCamera.hpp"
 #include "VRDevice.hpp"
 #include "VRInteraction.hpp"
+#include "Prediction.hpp"
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "runtimeobject.lib")
@@ -35,7 +36,7 @@ using namespace std;
 
 #define F2D(x) (int)x, (int)((x - floor(x)) * 10.0f)
 
-int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow) {
+int CALLBACK wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ PWSTR lpCmdLine, _In_ int nCmdShow) {
 	Microsoft::WRL::Wrappers::RoInitializeWrapper initialize(RO_INIT_SINGLETHREADED);
 	if (FAILED(initialize)) {
 		OutputDebugString(L"Failed to initialize COM!\n");
@@ -157,7 +158,12 @@ void cdvis::Initialize() {
 		mVREnable = false;
 	}
 }
-cdvis::cdvis() {}
+
+cdvis::cdvis() : mfps(0), mHmd(nullptr), mVRRenderModelInterface(nullptr), mFrameTimeIndex(0) {
+	ZeroMemory(mVRTrackedDevices, sizeof(vr::TrackedDevicePose_t) * 64);
+	ZeroMemory(mFrameTimes, sizeof(float) * 128);
+	ZeroMemory(mPerfBuffer, sizeof(wchar_t) * 1024);
+}
 cdvis::~cdvis() {
 	if (mHmd) vr::VR_Shutdown();
 }
@@ -184,6 +190,7 @@ void cdvis::BrowseVolume() {
 	XMFLOAT3 size;
 	mVolume->SetTexture(ImageLoader::LoadVolume(folder, size));
 	mVolume->LocalScale(size);
+	mVolumePath = folder;
 }
 void cdvis::BrowseMask() {
 	jwstring folder = BrowseFolder();
@@ -191,6 +198,11 @@ void cdvis::BrowseMask() {
 
 	auto tex = mVolume->GetTexture();
 	ImageLoader::LoadMask(folder, tex);
+	mVolume->SetTexture(tex);
+}
+void cdvis::RunPrediction() {
+	auto tex = mVolume->GetTexture();
+	Prediction::RunPrediction(mVolumePath, tex);
 	mVolume->SetTexture(tex);
 }
 
@@ -203,6 +215,8 @@ void cdvis::WindowEvent(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 				BrowseVolume();
 			if (wParam == 0x4D) // ctrl-m
 				BrowseMask();
+			if (wParam == 0x50) // ctrl-p
+				RunPrediction();
 		}
 	}
 }
@@ -262,7 +276,7 @@ void cdvis::VRGetRenderModel(unsigned int index, MeshRenderer* renderer) {
 	shared_ptr<Texture> texture = shared_ptr<Texture>(new Texture(L"VR Render Model Diffuse",
 		renderModelDiffuse->unWidth, renderModelDiffuse->unHeight, 1,
 		D3D12_RESOURCE_DIMENSION_TEXTURE2D, 1, DXGI_FORMAT_R8G8B8A8_UNORM, 1,
-		renderModelDiffuse->rubTextureMapData, renderModelDiffuse->unWidth * renderModelDiffuse->unHeight * 4, false));
+		renderModelDiffuse->rubTextureMapData, (size_t)renderModelDiffuse->unWidth * (size_t)renderModelDiffuse->unHeight * (size_t)4, false));
 	texture->Upload();
 
 	mVRMeshes.emplace(name, mesh);
@@ -351,8 +365,6 @@ void cdvis::Update(double total, double delta) {
 
 	if (Input::OnKeyDown(KeyCode::G))
 		mLight->mActivated = !mLight->mActivated;
-	if (Input::OnKeyDown(KeyCode::H))
-		mVolume->mISOEnable = !mVolume->mISOEnable;
 
 	if (Input::OnKeyDown(KeyCode::V))
 		mVREnable = !mVREnable;
@@ -411,10 +423,10 @@ void cdvis::Update(double total, double delta) {
 			mVolume->mMaskMode = (VolumeRenderer::MASK_MODE)((mVolume->mMaskMode + 1) % 3);
 
 		if (Input::KeyDown(KeyCode::N))
-			mVolume->mISOValue -= .2f * (float)delta;
+			mVolume->mThreshold -= .2f * (float)delta;
 		if (Input::KeyDown(KeyCode::M))
-			mVolume->mISOValue += .2f * (float)delta;
-		mVolume->mISOValue = fmaxf(fminf(mVolume->mISOValue, 1.f), 0.f);
+			mVolume->mThreshold += .2f * (float)delta;
+		mVolume->mThreshold = fmaxf(fminf(mVolume->mThreshold, 1.f), 0.f);
 
 		if (Input::KeyDown(KeyCode::Left))
 			mTVEyeSeparation -= 10.f * (float)delta;
@@ -449,14 +461,16 @@ void cdvis::PreRender(const shared_ptr<CommandList>& commandList) {
 	mVolume->mLightingEnable = mLight->mActivated;
 
 	mLight->GetMaterial(1)->SetFloat3("Emission", mLight->mActivated ? XMFLOAT3(1.f, 1.f, 1.f) : XMFLOAT3(0.f, 0.f, 0.f), commandList->GetFrameIndex());
+
+	mVolume->ComputeLighting();
 }
 
 void cdvis::Render(const shared_ptr<Camera>& cam, const shared_ptr<CommandList>& commandList) {
 	commandList->SetCamera(cam);
 	cam->Clear(commandList, { .2f, .2f, .2f, 1.0f });
+	if (mDebugDraw) mScene->DebugDraw(commandList, cam);
 	mScene->Draw(commandList, cam);
 	Graphics::GetSpriteBatch()->Flush(commandList);
-	if (mDebugDraw) mScene->DebugDraw(commandList, cam);
 }
 
 void cdvis::DoFrame() {
@@ -497,7 +511,9 @@ void cdvis::DoFrame() {
 	shared_ptr<SpriteBatch> sb = Graphics::GetSpriteBatch();
 	sb->Reset(commandList);
 
+	Profiler::BeginSample(L"Pre Render");
 	PreRender(commandList);
+	Profiler::EndSample();
 
 	if (mHmd && mVREnable) {
 		Render(mVRCamera->LeftEye(), commandList);
@@ -553,28 +569,28 @@ void cdvis::DoFrame() {
 		L"Light: %d.%d\n"
 		L"Exposure: %d.%d\n"
 		L"Thresh: %d%",
-		F2D(mVolume->mDensity), F2D(mVolume->mLightDensity), F2D(mVolume->mExposure), (int)(mVolume->mISOValue * 100.f + .5f));
+		F2D(mVolume->mDensity), F2D(mVolume->mLightDensity), F2D(mVolume->mExposure), (int)(mVolume->mThreshold * 100.f + .5f));
 	sb->DrawTextf(mArial, XMFLOAT2(5.0f, (float)mArial->GetAscender() * .4f), .4f, { 1,1,1,1 }, L"FPS: %d.%d\n", F2D(mfps));
 
 	if (mPerfOverlay) {
 	sb->DrawTextf(mArial, XMFLOAT2(5.0f, mWindowCamera->PixelHeight() - 300.0f), .4f, { 1,1,1,1 },
 		L"ctrl o: open volume (dicom folder)\n"
 		L"ctrl i: open single image slice\n"
+		L"ctrl m: open PNG mask\n"
+		L"ctrl p: run prediction\n"
+		L"a: cycle mask mode\n"
 		L"g: toggle volume lighting\n"
 		L"h: toggle volume threshold\n"
 		L"w/e: adjust density\n"
 		L"s/d: adjust light penetration\n"
 		L"x/c: adjust exposure\n"
-		L"n/m: adjust threshold value\n"
+		L"n/m: adjust threshold\n"
 		L"v: toggle vr\n"
 		L"t: toggle 3d tv mode\n"
-		L"y: toggle separate camera mode for 3d tv\n"
 		L"left/right: 3d tv eye separation\n"
 		L"F1: toggle window overlay\n"
 		L"F2: toggle debug\n"
-		L"F3: toggle wireframe\n"
-		L"vive touchpad: plane slice\n"
-		L"vive grip: move volume\n");
+		L"F3: toggle wireframe\n");
 
 		sb->DrawTextf(mArial, XMFLOAT2(5.0f, (float)mArial->GetAscender()), .4f, { 1,1,1,1 }, mPerfBuffer);
 
@@ -640,8 +656,8 @@ void cdvis::DoFrame() {
 		mfps = frameCounter / elapsedSeconds;
 		frameCounter = 0;
 		elapsedSeconds = 0.0;
-		ZeroMemory(mPerfBuffer, sizeof(wchar_t) * 1024);
-		Profiler::PrintLastFrame(mPerfBuffer, 1024);
+		ZeroMemory(mPerfBuffer, sizeof(wchar_t) * 4096);
+		Profiler::PrintLastFrame(mPerfBuffer, 4096);
 	}
 
 	// capture frame time every .05 seconds for frame time graph

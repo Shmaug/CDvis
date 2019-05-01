@@ -71,12 +71,12 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ExecutablePath>$(JAE_HOME)\$(Platform)\$(Configuration);$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(IncludePath)</IncludePath>
+    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(PYTHON_HOME)\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ExecutablePath>$(JAE_HOME)\$(Platform)\$(Configuration);$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(IncludePath)</IncludePath>
+    <IncludePath>$(JAE_HOME)\Jae3d;$(DCMTK_HOME)\include;$(OPENVR_HOME)\headers;$(PYTHON_HOME)\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -99,8 +99,10 @@
       <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(PYTHON_HOME)\libs</AdditionalLibraryDirectories>
       <AdditionalDependencies>Jae3d.lib;openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>
+      </SubSystem>
     </Link>
     <PostBuildEvent>
       <Command>xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.dll $(OutputPath) /q /y
@@ -138,8 +140,10 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(JAE_HOME)\$(Platform)\$(Configuration);$(DCMTK_HOME)\lib\$(Configuration);$(OPENVR_HOME)\lib\win64;$(PYTHON_HOME)\libs</AdditionalLibraryDirectories>
       <AdditionalDependencies>Jae3d.lib;openvr_api.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>
+      </SubSystem>
     </Link>
     <PostBuildEvent>
       <Command>xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\Jae3d.dll $(OutputPath) /q /y
@@ -156,6 +160,7 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClInclude Include="cdvis.hpp" />
     <ClInclude Include="ImageLoader.hpp" />
     <ClInclude Include="lodepng.hpp" />
+    <ClInclude Include="Prediction.hpp" />
     <ClInclude Include="VolumeRenderer.hpp" />
     <ClInclude Include="VRCamera.hpp" />
     <ClInclude Include="VRDevice.hpp" />
@@ -171,10 +176,12 @@ xcopy $(JAE_HOME)\$(Platform)\$(Configuration)\core.asset $(OutputPath) /q /y</C
     <ClCompile Include="cdvis.cpp" />
     <ClCompile Include="ImageLoader.cpp" />
     <ClCompile Include="lodepng.cpp" />
+    <ClCompile Include="Prediction.cpp" />
     <ClCompile Include="VolumeRenderer.cpp" />
     <ClCompile Include="VRCamera.cpp" />
     <ClCompile Include="VRDevice.cpp" />
     <ClCompile Include="VRDial.cpp" />
+    <ClCompile Include="VRInteractable.cpp" />
     <ClCompile Include="VRPieMenu.cpp" />
     <ClCompile Include="VRInteraction.cpp" />
     <ClCompile Include="VRToolTips.cpp" />

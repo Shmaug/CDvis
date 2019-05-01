@@ -1,10 +1,12 @@
 #pragma once
 
 #include <MeshRenderer.hpp>
+
 #include <openvr.h>
-#include <unordered_set>
 
 #include "VRInteractable.hpp"
+
+#include <unordered_set>
 
 class VRInteraction;
 
@@ -22,40 +24,40 @@ public:
 	const vr::VRControllerState_t& GetState() { return mState; }
 	const vr::VRControllerState_t& GetLastState() { return mLastState; }
 
-	bool ButtonPressed(vr::EVRButtonId button) const {
+	inline bool ButtonPressed(vr::EVRButtonId button) const {
 		return mState.ulButtonPressed & vr::ButtonMaskFromId(button);
 	}
-	bool ButtonPressedFirst(vr::EVRButtonId button) const {
+	inline bool ButtonPressedFirst(vr::EVRButtonId button) const {
 		return (mState.ulButtonPressed & vr::ButtonMaskFromId(button)) && !(mLastState.ulButtonPressed & vr::ButtonMaskFromId(button));
 	}
-	bool ButtonReleased(vr::EVRButtonId button) const {
+	inline bool ButtonReleased(vr::EVRButtonId button) const {
 		return !(mState.ulButtonPressed & vr::ButtonMaskFromId(button));
 	}
-	bool ButtonReleasedFirst(vr::EVRButtonId button) const {
+	inline bool ButtonReleasedFirst(vr::EVRButtonId button) const {
 		return !(mState.ulButtonPressed & vr::ButtonMaskFromId(button)) && (mLastState.ulButtonPressed & vr::ButtonMaskFromId(button));
 	}
 
-	bool ButtonTouched(vr::EVRButtonId button) const {
+	inline bool ButtonTouched(vr::EVRButtonId button) const {
 		return mState.ulButtonTouched & vr::ButtonMaskFromId(button);
 	}
-	bool ButtonTouchedFirst(vr::EVRButtonId button) const {
+	inline bool ButtonTouchedFirst(vr::EVRButtonId button) const {
 		return (mState.ulButtonTouched & vr::ButtonMaskFromId(button)) && !(mLastState.ulButtonTouched & vr::ButtonMaskFromId(button));
 	}
-	bool ButtonTouchReleased(vr::EVRButtonId button) const {
+	inline bool ButtonTouchReleased(vr::EVRButtonId button) const {
 		return !(mState.ulButtonTouched & vr::ButtonMaskFromId(button));
 	}
-	bool ButtonTouchReleasedFirst(vr::EVRButtonId button) const {
+	inline bool ButtonTouchReleasedFirst(vr::EVRButtonId button) const {
 		return !(mState.ulButtonTouched & vr::ButtonMaskFromId(button)) && (mLastState.ulButtonTouched & vr::ButtonMaskFromId(button));
 	}
 
-	DirectX::XMFLOAT3 DevicePosition() const { return mDevicePosition; }
-	DirectX::XMFLOAT4 DeviceRotation() const { return mDeviceRotation; }
-	DirectX::XMFLOAT3 LastDevicePosition() const { return mLastDevicePosition; }
-	DirectX::XMFLOAT4 LastDeviceRotation() const { return mLastDeviceRotation; }
-	DirectX::XMFLOAT3 DeltaDevicePosition() const { return mDeltaDevicePosition; }
-	DirectX::XMFLOAT4 DeltaDeviceRotation() const { return mDeltaDeviceRotation; }
+	inline DirectX::XMFLOAT3 DevicePosition() const { return mDevicePosition; }
+	inline DirectX::XMFLOAT4 DeviceRotation() const { return mDeviceRotation; }
+	inline DirectX::XMFLOAT3 LastDevicePosition() const { return mLastDevicePosition; }
+	inline DirectX::XMFLOAT4 LastDeviceRotation() const { return mLastDeviceRotation; }
+	inline DirectX::XMFLOAT3 DeltaDevicePosition() const { return mDeltaDevicePosition; }
+	inline DirectX::XMFLOAT4 DeltaDeviceRotation() const { return mDeltaDeviceRotation; }
 
-	bool Visible() override { return mVisible && mTracking; }
+	inline bool Visible() override { return mVisible && mTracking; }
 
 	bool mTracking;
 
@@ -80,7 +82,7 @@ private:
 	struct DragOperation {
 		DirectX::XMFLOAT3 mDragPos;
 		DirectX::XMFLOAT4 mDragRotation;
-		std::shared_ptr<Object> mObject;
+		std::weak_ptr<VRInteractable> mObject;
 	};
 	jvector<DragOperation> mDragging;
 	std::unordered_set<std::shared_ptr<VRInteractable>> mHovered;

@@ -15,11 +15,12 @@
 #include "VolumeRenderer.hpp"
 #include "VRPieMenu.hpp"
 #include "VRToolTips.hpp"
+#include "VRDial.hpp"
 
 using namespace std;
 using namespace DirectX;
 
-VRInteraction::VRInteraction() : mPieMenuAxis(0) {}
+VRInteraction::VRInteraction() : mPieMenuAxis(0), mCurTool(VRTOOL_PLANE), mLastPenPos(XMFLOAT3()) {}
 VRInteraction::~VRInteraction() {}
 
 void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
@@ -28,8 +29,6 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 
 	auto penMesh = AssetDatabase::GetAsset<Mesh>(L"pen");
 	penMesh->UploadStatic();
-	auto arrowMesh = AssetDatabase::GetAsset<Mesh>(L"rotatearrow");
-	arrowMesh->UploadStatic();
 
 	auto planeMesh = shared_ptr<Mesh>(new Mesh(L"plane"));
 	planeMesh->VertexCount(4);
@@ -57,12 +56,10 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 	auto planeMat = shared_ptr<Material>(new Material(L"Plane", colored));
 	planeMat->EnableKeyword("NOLIGHTING");
 
-	auto textMat = shared_ptr<Material>(new Material(L"Text", textured));
-	textMat->EnableKeyword("NOLIGHTING");
-
-	auto tooltipMat = shared_ptr<Material>(new Material(L"Text", textured));
+	auto tooltipMat = shared_ptr<Material>(new Material(L"Tooltip", textured));
 	tooltipMat->EnableKeyword("NOLIGHTING");
 	tooltipMat->CullMode(D3D12_CULL_MODE_NONE);
+	tooltipMat->Blend(BLEND_STATE_ALPHA);
 	tooltipMat->SetTexture("Texture", icons, -1);
 
 	mPen = scene->AddObject<MeshRenderer>(L"Pen");
@@ -81,16 +78,37 @@ void VRInteraction::InitTools(const shared_ptr<Scene>& scene) {
 	mPieMenu->LocalPosition(0, .02f, -.05f);
 	mPieMenu->mVisible = false;
 
-	mHudText = scene->AddObject<HudText>(L"HUD Text");
-	mHudText->Font(AssetDatabase::GetAsset<Font>(L"arial"));
-	mHudText->Material(textMat);
-	mHudText->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PIDIV2, 0, 0));
-	mHudText->LocalPosition(.5f, 1.f, -.1f);
-	mHudText->LocalScale(.1f, .1f, .1f);
-
 	mToolTips = scene->AddObject<VRToolTips>(L"ToolTips");
 	mToolTips->SetMaterial(tooltipMat);
 	mToolTips->mVisible = false;
+
+	auto panel = scene->AddObject<Object>(L"Panel");
+	panel->LocalRotation(XMQuaternionRotationRollPitchYaw(XM_PI * .25f, 0, 0));
+	panel->LocalPosition(-.5f, 1.05f, -.1f);
+
+	mThresholdDial = scene->AddObject<VRDial>(L"Threshold");
+	mThresholdDial->LocalScale(1.5f, 1.5f, 1.5f);
+	mThresholdDial->Parent(panel);
+	mThresholdDial->mSteps = 50;
+	mThresholdDial->Create();
+
+	mDensityDial = scene->AddObject<VRDial>(L"Density");
+	mDensityDial->LocalPosition(0, 0, .12f);
+	mDensityDial->LocalScale(1.5f, 1.5f, 1.5f);
+	mDensityDial->Parent(panel);
+	mDensityDial->mSteps = 50;
+	mDensityDial->mMax = 5.f;
+	mDensityDial->Value(2.0f);
+	mDensityDial->Create();
+
+	mExposureDial = scene->AddObject<VRDial>(L"Exposure");
+	mExposureDial->LocalPosition(0, 0, -.12f);
+	mExposureDial->LocalScale(1.5f, 1.5f, 1.5f);
+	mExposureDial->Parent(panel);
+	mExposureDial->mSteps = 50;
+	mExposureDial->mMax = 5.f;
+	mExposureDial->Value(1.0f);
+	mExposureDial->Create();
 }
 
 void VRInteraction::ProcessInput(const shared_ptr<Scene>& scene, const jvector<shared_ptr<VRDevice>>& controllers, const shared_ptr<VolumeRenderer>& volume, double deltaTime) {
@@ -203,14 +221,7 @@ void VRInteraction::ProcessInput(const shared_ptr<Scene>& scene, const jvector<s
 	}
 	mLastPenPos = mPen->WorldPosition();
 
-	if (mHudText->mVisible) {
-		static wchar_t hudtext[1024];
-		swprintf_s(hudtext, 1024,
-			L"Density: %.1f\n"
-			L"Exposure: %.1f\n"
-			L"Thresh: %.1f%%\n"
-			L"Light: %.1f",
-			volume->mDensity, volume->mLightIntensity, volume->mExposure, volume->mISOValue * 100.f);
-		mHudText->Text(hudtext);
-	}
+	volume->mThreshold = mThresholdDial->Value();
+	volume->mExposure = mExposureDial->Value();
+	volume->mDensity = mDensityDial->Value();
 }

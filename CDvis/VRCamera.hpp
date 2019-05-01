@@ -3,6 +3,7 @@
 #include <wrl.h>
 #include <Camera.hpp>
 #include <CommandList.hpp>
+
 #include <openvr.h>
 
 class VRCamera : public Object {

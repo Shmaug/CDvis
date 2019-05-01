@@ -38,7 +38,9 @@ public:
 		const std::shared_ptr<Material>& mMaterial;
 
 		PieMenuRenderJob(unsigned int queue, const PieMesh& mesh, const std::shared_ptr<Material>& mat)
-			: RenderJob(queue), mMesh(mesh), mMaterial(mat) {}
+			: RenderJob(queue), mMesh(mesh), mMaterial(mat) {
+			mName = L"PieMenu";
+		}
 
 		void Execute(const std::shared_ptr<CommandList>& commandList, const std::shared_ptr<Material>& materialOverride) override;
 	};

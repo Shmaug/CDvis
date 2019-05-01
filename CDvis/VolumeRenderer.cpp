@@ -11,7 +11,7 @@ using namespace DirectX;
 
 VolumeRenderer::VolumeRenderer() : VolumeRenderer(L"volume") {}
 VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name),
-	mDensity(2.f), mLightDensity(100.0f), mLightIntensity(1.f), mExposure(1.f), mISOValue(.2f), mLightMode(-1), mVisible(true),
+	mDensity(2.f), mLightDensity(250.0f), mLightIntensity(1.f), mExposure(1.f), mThreshold(.2f), mLightMode(-1), mVisible(true), mInvertDensity(false),
 	mMaskMode(MASK_MODE_ENABLED) {
 
 	mCubeMesh = shared_ptr<Mesh>(new Mesh(L"Cube"));
@@ -20,9 +20,15 @@ VolumeRenderer::VolumeRenderer(jwstring name) : Renderer(name),
 	mShader = AssetDatabase::GetAsset<Shader>(L"volume");
 	mComputeShader = AssetDatabase::GetAsset<Shader>(L"volume_compute");
 
-	uint16_t white16[2] = { 0xFFFF, 0xFFFF };
-	mTexture = shared_ptr<Texture>(new Texture(L"Blank Vol Texture", 1, 1, 1, D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16G16_UNORM, 1, white16, 2 * sizeof(uint16_t), false));
+	mTexture = shared_ptr<Texture>(new Texture(L"Blank Vol Texture", 1, 1, 1, D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16G16_UNORM, 1, nullptr, 0, false));
 	mTexture->Upload(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	mBakedTexture = shared_ptr<Texture>(new Texture(L"Baked Vol Texture", 1, 1, 1, D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, DXGI_FORMAT_R16G16_UNORM, 1, nullptr, 0, false));
+	mBakedTexture->Upload(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	mUAVTable = shared_ptr<DescriptorTable>(new DescriptorTable(2));
+	mUAVTable->SetUAV(0, mTexture);
+	mUAVTable->SetUAV(1, mBakedTexture);
 }
 VolumeRenderer::~VolumeRenderer() {
 	for (const auto &i : mSRVTables)
@@ -31,11 +37,20 @@ VolumeRenderer::~VolumeRenderer() {
 
 void VolumeRenderer::SetTexture(const std::shared_ptr<Texture>& tex) {
 	mTexture = tex;
-	if (!mTexture) return;
-	for (const auto &it : mSRVTables)
-		for (unsigned int i = 0; i < Graphics::BufferCount(); i++) {
-			it.second[i]->SetSRV(0, mTexture);
-		}
+	mUAVTable->SetUAV(0, mTexture);
+	if (!mTexture) { mBakedTexture = nullptr; return; }
+
+	if (mBakedTexture->Width() != mTexture->Width() || mBakedTexture->Height() != mTexture->Height() || mBakedTexture->Depth() != mTexture->Depth()) {
+		mBakedTexture = shared_ptr<Texture>(new Texture(L"Baked Vol Texture", mTexture->Width(), mTexture->Height(), mTexture->Depth(), D3D12_RESOURCE_DIMENSION_TEXTURE3D, 1, mTexture->Format(), 1, nullptr, 0, false));
+		mBakedTexture->Upload(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+		mUAVTable->SetUAV(1, mBakedTexture);
+
+		for (const auto &it : mSRVTables)
+			for (unsigned int i = 0; i < Graphics::BufferCount(); i++) {
+				it.second[i]->SetSRV(0, mBakedTexture);
+			}
+	}
 }
 
 void VolumeRenderer::WorldToUVW(const XMFLOAT3& wp, XMFLOAT3& uvw) {
@@ -50,7 +65,7 @@ float VolumeRenderer::GetPixel(const XMUINT3& p) const {
 	uint8_t* pixels = (uint8_t*)mTexture->GetPixelData();
 	unsigned int i = p.x + p.y * mTexture->Width() + p.z * (mTexture->Width() * mTexture->Height());
 
-	float x;
+	float x = 0.f;
 	switch (mTexture->Format()) {
 	case DXGI_FORMAT_R8G8B8A8_UNORM:
 	{
@@ -78,7 +93,7 @@ float VolumeRenderer::GetPixel(const XMUINT3& p) const {
 		break;
 	}
 
-	if (mISOEnable) x = fmaxf(0, x - mISOValue);
+	x = fmaxf(0, x - mThreshold) / (1.f - mThreshold);
 	return x;
 }
 
@@ -167,7 +182,7 @@ void VolumeRenderer::FillMask(float value) {
 	commandList->SetCompute(mComputeShader);
 
 	commandList->D3DCommandList()->SetComputeRoot32BitConstants(1, 1, &value, 3);
-	commandList->SetComputeRootDescriptorTable(0, mTexture->GetUAVDescriptorHeap().Get(), mTexture->GetUAVGPUDescriptor());
+	commandList->SetComputeRootDescriptorTable(0, mUAVTable->D3DHeap().Get(), mUAVTable->GpuDescriptor());
 	commandList->D3DCommandList()->Dispatch((mTexture->Width() + 7) / 8, (mTexture->Height() + 7) / 8, (mTexture->Depth() + 7) / 8);
 	
 	commandQueue->Execute(commandList);
@@ -181,12 +196,16 @@ void VolumeRenderer::PaintMask(const XMFLOAT3& lastWorldPos, const XMFLOAT3& wor
 		float paintRadius;
 		XMFLOAT3 paintPos1;
 		float paintValue;
+		XMFLOAT3 texelSize;
 	};
 	Data d;
 	d.paintPos0 = lastWorldPos;
 	d.paintRadius = radius * radius;
 	d.paintPos1 = worldPos;
 	d.paintValue = value;
+	d.texelSize.x = 1.f / mTexture->Width();
+	d.texelSize.y = 1.f / mTexture->Height();
+	d.texelSize.z = 1.f / mTexture->Depth();
 
 	XMStoreFloat4x4(&d.indexToWorld,
 		XMMatrixMultiply(
@@ -203,11 +222,99 @@ void VolumeRenderer::PaintMask(const XMFLOAT3& lastWorldPos, const XMFLOAT3& wor
 	commandList->SetCompute(mComputeShader);
 
 	commandList->D3DCommandList()->SetComputeRoot32BitConstants(1, sizeof(Data) / 4, &d, 0);
-	commandList->SetComputeRootDescriptorTable(0, mTexture->GetUAVDescriptorHeap().Get(), mTexture->GetUAVGPUDescriptor());
+	commandList->SetComputeRootDescriptorTable(0, mUAVTable->D3DHeap().Get(), mUAVTable->GpuDescriptor());
 
 	commandList->D3DCommandList()->Dispatch((mTexture->Width() + 7) / 8, (mTexture->Height() + 7) / 8, (mTexture->Depth() + 7) / 8);
 
 	commandQueue->Execute(commandList);
+}
+
+void VolumeRenderer::ComputeLighting() {
+	if (!mComputeShader || !mTexture || !mBakedTexture) return;
+
+	auto commandQueue = Graphics::GetCommandQueue(D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	auto commandList = commandQueue->GetCommandList(0);
+
+	XMFLOAT3 texelSize(1.f / mTexture->Width(), 1.f / mTexture->Height(), 1.f / mTexture->Depth());
+
+	commandList->EnableKeyword("PRECOMPUTE");
+	SetRootParameters(commandList, nullptr);
+
+	commandList->SetCompute(mComputeShader);
+
+	commandList->SetComputeRootDescriptorTable(0, mUAVTable->D3DHeap().Get(), mUAVTable->GpuDescriptor());
+	commandList->D3DCommandList()->SetComputeRoot32BitConstants(1, 3, &texelSize, 24);
+	commandList->D3DCommandList()->SetComputeRoot32BitConstants(2, sizeof(RootData) / 4, &mRootData, 0);
+
+	commandList->D3DCommandList()->Dispatch((mTexture->Width() + 7) / 8, (mTexture->Height() + 7) / 8, (mTexture->Depth() + 7) / 8);
+
+	commandQueue->Execute(commandList);
+}
+
+void VolumeRenderer::SetRootParameters(const shared_ptr<CommandList>& commandList, Camera* camera) {
+	if (mLightingEnable) {
+		switch (mLightMode) {
+		case 0:
+			commandList->EnableKeyword("LIGHT_DIRECTIONAL");
+			break;
+		case 1:
+			commandList->EnableKeyword("LIGHT_SPOT");
+			break;
+		case 2:
+			commandList->EnableKeyword("LIGHT_POINT");
+			break;
+		}
+	}
+
+	if (mSlicePlaneEnable)
+		commandList->EnableKeyword("PLANE");
+	else
+		commandList->DisableKeyword("PLANE");
+
+	if (mBakedTexture->Format() == DXGI_FORMAT_R8G8B8A8_UNORM) {
+		commandList->EnableKeyword("COLOR");
+		commandList->DisableKeyword("MASK");
+		commandList->DisableKeyword("MASK_DISP");
+	}
+	else {
+		commandList->DisableKeyword("COLOR");
+
+		switch (mMaskMode) {
+		default:
+			commandList->DisableKeyword("MASK");
+			commandList->DisableKeyword("MASK_DISP");
+			break;
+		case MASK_MODE_ENABLED:
+			commandList->EnableKeyword("MASK");
+			break;
+		case MASK_MODE_DISPLAY:
+			commandList->EnableKeyword("MASK_DISP");
+			break;
+		}
+	}
+
+	XMMATRIX w2o = XMLoadFloat4x4(&WorldToObject());
+	if (camera) {
+		XMFLOAT4X4 proj = camera->Projection();
+		mRootData.camPos = camera->WorldPosition();
+		mRootData.proj43 = proj._43;
+		mRootData.proj33 = proj._33;
+	}
+
+	XMVECTOR invRot = XMQuaternionInverse(XMLoadFloat4(&WorldRotation()));
+
+	XMStoreFloat3(&mRootData.lightPos, XMVector3Rotate(XMVectorSubtract(XMLoadFloat3((XMFLOAT3*)& mLightPos), XMLoadFloat3(&WorldPosition())), invRot));
+	mRootData.slicep = mSlicePlanePoint;
+	mRootData.density = mDensity;
+	mRootData.slicen = mSlicePlaneNormal;
+	mRootData.lightDensity = mLightDensity;
+	XMStoreFloat3(&mRootData.lightDir, XMVector3Rotate(XMLoadFloat3(&mLightDir), invRot));
+	mRootData.exposure = mExposure;
+	mRootData.scale = LocalScale();
+	mRootData.lightIntensity = mLightIntensity;
+	mRootData.lightAngle = mLightAngle;
+	mRootData.lightAmbient = mLightAmbient;
+	mRootData.isoValue = mThreshold;
 }
 
 void VolumeRenderer::GatherRenderJobs(const std::shared_ptr<CommandList>& commandList, const shared_ptr<Camera>& camera, jvector<RenderJob*> &list) {
@@ -248,7 +355,7 @@ void VolumeRenderer::GatherRenderJobs(const std::shared_ptr<CommandList>& comman
 	if (!depthTex || depthTex->Width() != camera->PixelWidth() || depthTex->Height() != camera->PixelHeight()) {
 		depthTex = shared_ptr<Texture>(new Texture(L"Volume Depth Texture", camera->PixelWidth(), camera->PixelHeight(), DXGI_FORMAT_R32_FLOAT));
 		depthTex->Upload(D3D12_RESOURCE_FLAG_NONE, false);
-		tbl->SetSRV(0, mTexture);
+		tbl->SetSRV(0, mBakedTexture);
 		tbl->SetSRV(1, depthTex);
 	}
 
@@ -278,97 +385,10 @@ void VolumeRenderer::VolumeRenderJob::Execute(const shared_ptr<CommandList>& com
 	commandList->PushState();
 	commandList->SetMaterial(nullptr);
 
-	if (mVolume->mLightingEnable) {
-		switch (mVolume->mLightMode) {
-		case 0:
-			commandList->EnableKeyword("LIGHT_DIRECTIONAL");
-			break;
-		case 1:
-			commandList->EnableKeyword("LIGHT_SPOT");
-			break;
-		case 2:
-			commandList->EnableKeyword("LIGHT_POINT");
-			break;
-		}
-	}
-
-	if (mVolume->mSlicePlaneEnable)
-		commandList->EnableKeyword("PLANE");
-	else
-		commandList->DisableKeyword("PLANE");
-
-	if (mVolume->mISOEnable)
-		commandList->EnableKeyword("ISO");
-	else
-		commandList->DisableKeyword("ISO");
-
-	if (mVolume->mTexture->Format() == DXGI_FORMAT_R8G8B8A8_UNORM) {
-		commandList->EnableKeyword("COLOR");
-		commandList->DisableKeyword("MASK");
-		commandList->DisableKeyword("MASK_DISP");
-	} else {
-		commandList->DisableKeyword("COLOR");
-
-		switch (mVolume->mMaskMode) {
-		default:
-			commandList->DisableKeyword("MASK");
-			commandList->DisableKeyword("MASK_DISP");
-			break;
-		case MASK_MODE_ENABLED:
-			commandList->EnableKeyword("MASK");
-			break;
-		case MASK_MODE_DISPLAY:
-			commandList->EnableKeyword("MASK_DISP");
-			break;
-		}
-	}
-
-	XMMATRIX w2o = XMLoadFloat4x4(&mVolume->WorldToObject());
-	XMFLOAT4X4 proj = mCamera->Projection();
-
-	float n = mCamera->Near();
-	float f = mCamera->Far();
-
-	XMVECTOR invRot = XMQuaternionInverse(XMLoadFloat4(&mVolume->WorldRotation()));
-
-	struct RootData {
-		XMFLOAT3 camPos;		// float3 CameraPosition;
-		float proj43;			// float Projection43;
-		XMFLOAT3 lightPos;		// float3 LightPosition;
-		float proj33;			// float Projection33;
-		XMFLOAT3 slicep;		// float3 PlanePoint;
-		float density;			// float Density;
-		XMFLOAT3 slicen;		// float3 PlaneNormal;
-		float lightDensity;		// float LightDensity;
-		XMFLOAT3 lightDir;		// float3 LightDirection;
-		float exposure;			// float Exposure;
-		XMFLOAT3 scale;			// float3 WorldScale;
-		float lightIntensity;	// float LightIntensity;
-		float lightAngle;		// float LightAngle;
-		float lightAmbient;		// float LightAmbient;
-		float isoValue;			// float ISOValue;
-	};
-	RootData data;
-
-	data.camPos = mCamera->WorldPosition();
-	data.proj43 = proj._43;
-	XMStoreFloat3(&data.lightPos,
-		XMVector3Rotate(XMVectorSubtract(XMLoadFloat3((XMFLOAT3*)&mVolume->mLightPos), XMLoadFloat3(&mVolume->WorldPosition())), invRot));
-	data.proj33 = proj._33;
-	data.slicep = mVolume->mSlicePlanePoint;
-	data.density = mVolume->mDensity,
-	data.slicen = mVolume->mSlicePlaneNormal;
-	data.lightDensity = mVolume->mLightDensity;
-	XMStoreFloat3(&data.lightDir, XMVector3Rotate(XMLoadFloat3(&mVolume->mLightDir), invRot));
-	data.exposure = mVolume->mExposure;
-	data.scale = mVolume->LocalScale();
-	data.lightIntensity = mVolume->mLightIntensity;
-	data.lightAngle = mVolume->mLightAngle;
-	data.lightAmbient = mVolume->mLightAmbient;
-	data.isoValue = mVolume->mISOValue;
+	mVolume->SetRootParameters(commandList, mCamera);
 
 	commandList->SetShader(mVolume->mShader);
-	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, (UINT)sizeof(RootData) / 4, &data, 0);
+	commandList->D3DCommandList()->SetGraphicsRoot32BitConstants(0, (UINT)sizeof(RootData) / 4, &mRootData, 0);
 
 	commandList->SetGraphicsRootDescriptorTable(1, mSRVTable->D3DHeap().Get(), mSRVTable->GpuDescriptor());
 	commandList->SetRootCBV(2, mCB);

@@ -2,13 +2,14 @@
 
 #include <IJaeGame.hpp>
 #include <Camera.hpp>
-#include <openvr.h>
 #include <Mesh.hpp>
 #include <Material.hpp>
 #include <MeshRenderer.hpp>
 #include <Scene.hpp>
 #include <Font.hpp>
 #include <Texture.hpp>
+
+#include <openvr.h>
 
 #include "VRInteractable.hpp"
 
@@ -38,6 +39,7 @@ public:
 	void BrowseImage();
 	void BrowseVolume();
 	void BrowseMask();
+	void RunPrediction();
 
 private:
 	double mfps;
@@ -65,6 +67,7 @@ private:
 	std::shared_ptr<VolumeRenderer> mVolume;
 	std::shared_ptr<VRInteraction> mVRInteraction;
 	std::shared_ptr<VRLight> mLight;
+	jwstring mVolumePath;
 
 	// OpenVR
 	vr::IVRSystem* mHmd;
@@ -82,7 +85,7 @@ private:
 	bool m3DTVEnable = false;
 	float mTVEyeSeparation = 0.f;
 
-	wchar_t mPerfBuffer[1024]; // performance overlay text
+	wchar_t mPerfBuffer[4096]; // performance overlay text
 	float mFrameTimes[128];
 	unsigned int mFrameTimeIndex;
 	bool mDebugDraw = false;

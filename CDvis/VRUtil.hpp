@@ -1,6 +1,7 @@
 #pragma once
 
 #include <openvr.h>
+
 #include <DirectXMath.h>
 #include <Object.hpp>
 
