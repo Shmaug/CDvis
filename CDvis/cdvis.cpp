@@ -43,8 +43,18 @@ int CALLBACK wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 		return -1;
 	}
 
+	// Suppress individual messages by their ID
+	D3D12_MESSAGE_ID denyIds[] = {
+		D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,   // I'm really not sure how to avoid this message.
+		D3D12_MESSAGE_ID_MAP_INVALID_NULLRANGE,                         // This warning occurs when using capture frame while graphics debugging.
+		D3D12_MESSAGE_ID_UNMAP_INVALID_NULLRANGE,                       // This warning occurs when using capture frame while graphics debugging.
+		D3D12_MESSAGE_ID_REFLECTSHAREDPROPERTIES_INVALIDOBJECT
+	};
+
 	// turn tearing off if targeting 3d tv, to allow for true fullscreen
-	HWND hWnd = JaeCreateWindow(L"CDvis", 1600, 900, 3, Graphics::CheckTearingSupport());
+	HWND hWnd = JaeCreateWindow(L"CDvis", 1600, 900, 3, Graphics::CheckTearingSupport(),
+		0, nullptr,
+		_countof(denyIds), denyIds);
 	Graphics::GetWindow()->SetVSync(false);
 
 	cdvis* game = new cdvis();
@@ -95,7 +105,7 @@ bool cdvis::InitializeVR() {
 	mVRInteraction = shared_ptr<VRInteraction>(new VRInteraction());
 	mVRInteraction->InitTools(mScene);
 
-	mVREnable = true;
+	mVREnable = false;
 
 	return true;
 }
@@ -360,7 +370,6 @@ void cdvis::Update(double total, double delta) {
 		mVRInteraction->ProcessInput(mScene, trackedControllers, mVolume, delta);
 	}
 	#pragma endregion
-
 	#pragma region PC controls
 
 	if (Input::OnKeyDown(KeyCode::G))
@@ -627,19 +636,13 @@ void cdvis::DoFrame() {
 	// Submit VR textures (after window Present/command list execution)
 	if (mVREnable && mHmd) {
 		Profiler::BeginSample(L"Submit VR Textures");
-		vr::VRTextureBounds_t bounds;
-		bounds.uMin = 0.0f;
-		bounds.uMax = 1.0f;
-		bounds.vMin = 0.0f;
-		bounds.vMax = 1.0f;
+		vr::D3D12TextureData_t d3d12LeftEyeTexture = { mVRCamera->LeftEye()->RenderBuffer().Get(), commandQueue->GetCommandQueue().Get(), 0 };
+		vr::Texture_t leftEyeTexture = { (void*)&d3d12LeftEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
+		vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture, nullptr, vr::Submit_Default);
 
-		vr::D3D12TextureData_t d3d12LeftEyeTexture = { mVRCamera->LeftEyeTexture().Get(), commandQueue->GetCommandQueue().Get(), 0 };
-		vr::Texture_t leftEyeTexture = { (void *)&d3d12LeftEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
-		vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture, &bounds, vr::Submit_Default);
-
-		vr::D3D12TextureData_t d3d12RightEyeTexture = { mVRCamera->RightEyeTexture().Get(), commandQueue->GetCommandQueue().Get(), 0 };
-		vr::Texture_t rightEyeTexture = { (void *)&d3d12RightEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
-		vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture, &bounds, vr::Submit_Default);
+		vr::D3D12TextureData_t d3d12RightEyeTexture = { mVRCamera->RightEye()->RenderBuffer().Get(), commandQueue->GetCommandQueue().Get(), 0 };
+		vr::Texture_t rightEyeTexture = { (void*)&d3d12RightEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
+		vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture, nullptr, vr::Submit_Default);
 		Profiler::EndSample();
 	}
 

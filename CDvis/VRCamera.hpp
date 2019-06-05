@@ -32,6 +32,7 @@ private:
 	std::shared_ptr<Camera> mLeftEye;
 	std::shared_ptr<Camera> mRightEye;
 
+	_WRL::ComPtr<ID3D12Heap> mTextureHeap;
 	_WRL::ComPtr<ID3D12Resource> mLeftEyeTexture;
 	_WRL::ComPtr<ID3D12Resource> mRightEyeTexture;
 

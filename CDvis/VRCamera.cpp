@@ -3,6 +3,7 @@
 #include <Scene.hpp>
 #include <Graphics.hpp>
 
+#include "Texture.hpp"
 #include "VRUtil.hpp"
 
 using namespace std;
@@ -38,16 +39,14 @@ void VRCamera::CreateCameras(unsigned int resx, unsigned int resy){
 		D3D12_HEAP_FLAG_NONE,
 		&CD3DX12_RESOURCE_DESC::Tex2D(mLeftEye->RenderFormat(), mLeftEye->PixelWidth(), mLeftEye->PixelHeight()),
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-		nullptr,
-		IID_PPV_ARGS(&mLeftEyeTexture)));
+		nullptr, IID_PPV_ARGS(&mLeftEyeTexture)));
 
 	ThrowIfFailed(device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAG_NONE,
 		&CD3DX12_RESOURCE_DESC::Tex2D(mRightEye->RenderFormat(), mRightEye->PixelWidth(), mRightEye->PixelHeight()),
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-		nullptr,
-		IID_PPV_ARGS(&mRightEyeTexture)));
+		nullptr, IID_PPV_ARGS(&mRightEyeTexture)));
 
 	// Create SRV Heap and SRVs
 	auto inc = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -74,8 +73,8 @@ void VRCamera::UpdateCameras(vr::IVRSystem* hmd) {
 	VR2DX(hmd->GetEyeToHeadTransform(vr::EVREye::Eye_Right), mRightEye.get());
 
 	// TODO: why do i need to multiply this by .5???
-	mLeftEye->LocalPosition(.5f * mLeftEye->LocalPosition().x, mLeftEye->LocalPosition().y * .5f, mLeftEye->LocalPosition().z * .5f);
-	mRightEye->LocalPosition(.5f * mRightEye->LocalPosition().x, mRightEye->LocalPosition().y * .5f, mRightEye->LocalPosition().z * .5f);
+	mLeftEye->LocalPosition(mLeftEye->LocalPosition().x * .5f, mLeftEye->LocalPosition().y * .5f, mLeftEye->LocalPosition().z * .5f);
+	mRightEye->LocalPosition(mRightEye->LocalPosition().x * .5f, mRightEye->LocalPosition().y * .5f, mRightEye->LocalPosition().z * .5f);
 
 	float l, r, t, b;
 	hmd->GetProjectionRaw(vr::EVREye::Eye_Left, &l, &r, &t, &b);

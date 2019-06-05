@@ -12,13 +12,15 @@ XMFLOAT4X4 VR2DX(const vr::HmdMatrix34_t& mat) {
 }
 
 void VR2DX(const vr::HmdMatrix34_t& mat, XMFLOAT3 &position, XMFLOAT4 &rotation) {
-	XMVECTOR scale;
+	XMVECTOR sc;
 	XMVECTOR pos;
 	XMVECTOR rot;
-	XMMatrixDecompose(&scale, &rot, &pos, XMLoadFloat4x4(&VR2DX(mat)));
+	XMMatrixDecompose(&sc, &rot, &pos, XMLoadFloat4x4(&VR2DX(mat)));
 
+	XMFLOAT3 scale;
 	XMStoreFloat3(&position, pos);
 	XMStoreFloat4(&rotation, rot);
+	XMStoreFloat3(&scale, sc);
 
 	// rh coordinates to lh coordinates: flip z
 	position.z = -position.z;

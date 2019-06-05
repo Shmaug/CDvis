@@ -14,7 +14,6 @@
 class VRDevice;
 class VolumeRenderer;
 class VRPieMenu;
-class VRController;
 class VRToolTips;
 class VRDial;
 
