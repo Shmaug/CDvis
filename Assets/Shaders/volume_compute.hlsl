@@ -115,8 +115,8 @@ float4 Sample(uint3 p) {
 
 void Lighting(float3 p, inout float4 col) {
 	#define ldt .002
-	#define ls 20
-	#define ils2 .0025
+	#define ls 5
+	#define ils2 .04
 
 	#if defined(LIGHT_DIRECTIONAL)
 

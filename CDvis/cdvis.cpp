@@ -1,5 +1,7 @@
 #include "cdvis.hpp"
 
+#define NOPROFILER
+
 #include <jae.hpp>
 #include <Profiler.hpp>
 #include <Input.hpp>
@@ -494,22 +496,22 @@ void cdvis::DoFrame() {
 
 	// Get poses as late as possible to maintain realtimeness
 	if (mHmd) {
-		Profiler::BeginSample(L"Update Tracking");
+		PROFILER_BEGIN(L"Update Tracking");
 		vr::VRCompositor()->WaitGetPoses(mVRTrackedDevices, vr::k_unMaxTrackedDeviceCount, NULL, 0);
-		Profiler::EndSample();
+		PROFILER_END();
 	}
 
 	#pragma region update
-	Profiler::BeginSample(L"Update");
+	PROFILER_BEGIN(L"Update");
 	auto t1 = clock.now();
 	double delta = (t1 - t0).count() * 1e-9;
 	t0 = t1;
 	Update((t1 - start).count() * 1e-9, delta);
-	Profiler::EndSample();
+	PROFILER_END();
 	#pragma endregion
 
 	#pragma region render
-	Profiler::BeginSample(L"Render");
+	PROFILER_BEGIN(L"Render");
 	auto commandQueue = Graphics::GetCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	auto commandList = commandQueue->GetCommandList(Graphics::CurrentFrameIndex());
 	auto d3dCommandList = commandList->D3DCommandList();
@@ -520,16 +522,16 @@ void cdvis::DoFrame() {
 	shared_ptr<SpriteBatch> sb = Graphics::GetSpriteBatch();
 	sb->Reset(commandList);
 
-	Profiler::BeginSample(L"Pre Render");
+	PROFILER_BEGIN(L"Pre Render");
 	PreRender(commandList);
-	Profiler::EndSample();
+	PROFILER_END();
 
 	if (mHmd && mVREnable) {
 		Render(mVRCamera->LeftEye(), commandList);
 		Render(mVRCamera->RightEye(), commandList);
 
 		// draw eye textures to window
-		Profiler::BeginSample(L"Draw Eyes");
+		PROFILER_BEGIN(L"Draw Eyes");
 		mVRCamera->ResolveEyeTextures(commandList);
 		commandList->SetCamera(mWindowCamera);
 		commandList->SetFillMode(D3D12_FILL_MODE_SOLID);
@@ -565,13 +567,13 @@ void cdvis::DoFrame() {
 			sb->DrawTexture(mVRCamera->SRVHeap(), mVRCamera->RightEyeSRV(), XMFLOAT4(w*.5f, h*.5f - t.y, w*.5f + t.x, h*.5f + t.y), XMFLOAT4(1, 1, 1, 1), XMFLOAT4(0, 0, 1, 1));
 		}
 
-		Profiler::EndSample();
+		PROFILER_END();
 	} else {
 		Render(mWindowCamera, commandList);
 	}
 
 #pragma region window overlay
-	Profiler::BeginSample(L"Window Overlay");
+	PROFILER_BEGIN(L"Window Overlay");
 
 	sb->DrawTextf(mArial, XMFLOAT2(mWindowCamera->PixelWidth() * .5f, (float)mArial->GetAscender() * .4f), .4f, { 1,1,1,1 }, 
 		L"Density: %d.%d\n"
@@ -614,16 +616,16 @@ void cdvis::DoFrame() {
 		}
 		sb->DrawLines(verts, colors);
 	}
-	Profiler::EndSample();
+	PROFILER_END();
 #pragma endregion
 
-	Profiler::BeginSample(L"Flush SpriteBatch");
+	PROFILER_BEGIN(L"Flush SpriteBatch");
 	sb->Flush(commandList);
-	Profiler::EndSample();
+	PROFILER_END();
 
-	Profiler::EndSample();
+	PROFILER_END();
 
-	Profiler::BeginSample(L"Present");
+	PROFILER_BEGIN(L"Present");
 	ID3D12Resource* camrt = mWindowCamera->RenderBuffer().Get();
 	ID3D12Resource* winrt = window->RenderBuffer().Get();
 	commandList->TransitionResource(camrt, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
@@ -635,7 +637,7 @@ void cdvis::DoFrame() {
 
 	// Submit VR textures (after window Present/command list execution)
 	if (mVREnable && mHmd) {
-		Profiler::BeginSample(L"Submit VR Textures");
+		PROFILER_BEGIN(L"Submit VR Textures");
 		vr::D3D12TextureData_t d3d12LeftEyeTexture = { mVRCamera->LeftEye()->RenderBuffer().Get(), commandQueue->GetCommandQueue().Get(), 0 };
 		vr::Texture_t leftEyeTexture = { (void*)&d3d12LeftEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
 		vr::VRCompositor()->Submit(vr::Eye_Left, &leftEyeTexture, nullptr, vr::Submit_Default);
@@ -643,10 +645,10 @@ void cdvis::DoFrame() {
 		vr::D3D12TextureData_t d3d12RightEyeTexture = { mVRCamera->RightEye()->RenderBuffer().Get(), commandQueue->GetCommandQueue().Get(), 0 };
 		vr::Texture_t rightEyeTexture = { (void*)&d3d12RightEyeTexture, vr::TextureType_DirectX12, vr::ColorSpace_Gamma };
 		vr::VRCompositor()->Submit(vr::Eye_Right, &rightEyeTexture, nullptr, vr::Submit_Default);
-		Profiler::EndSample();
+		PROFILER_END();
 	}
 
-	Profiler::EndSample();
+	PROFILER_END();
 	#pragma endregion
 
 	Input::FrameEnd();

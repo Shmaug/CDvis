@@ -152,7 +152,7 @@ float4 psmain(v2f i) : SV_Target {
 
 	float4 sum = 0;
 
-	#define dt .0015
+	#define dt .003
 	uint steps = 0;
 	float pd = 0;
 	for (float t = intersect.x; t < intersect.y;) {
